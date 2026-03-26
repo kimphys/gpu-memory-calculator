@@ -143,10 +143,7 @@ export default function InfoModal() {
                   <p>업계 표준인 <strong>6P tokens</strong> 공식을 사용합니다. 파라미터 1개당 토큰 1개를 처리하는 데 약 6번의 부동소수점 연산(Forward 3, Backward 3)이 소요된다는 물리적 기반의 추정치입니다.</p>
                   <code className="block mt-2 p-2 bg-black/30 rounded text-accent-300">Total FLOPs = 6 × Parameters × Total Tokens</code>
                 </div>
-                <div>
-                  <strong className="text-white block mb-1">Micro Batch vs Gradient Accumulation (GAS)</strong>
-                  <p>VRAM 한계로 인해 배치 사이즈를 무한정 키울 수 없습니다. <strong>Micro Batch</strong>는 실제 GPU 메모리에 한 번에 올리는 물리적 한계치이며, <strong>GAS</strong>는 가중치 업데이트 없이 그래디언트를 쌓아가는 단계입니다. 이를 통해 물리적 한계 이상의 <strong>Global Batch</strong> 효과를 낼 수 있습니다.</p>
-                </div>
+
               </div>
             </div>
           </section>

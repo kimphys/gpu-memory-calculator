@@ -419,9 +419,7 @@ export default function InputPanel() {
           
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-400 font-medium">
-                {store.params.isTraining ? 'Micro Batch Size (per GPU)' : 'Batch Size'}
-              </span>
+              <span className="text-gray-400 font-medium">Batch Size</span>
               <div onDoubleClick={() => store.setEditingField('batchSize')}>
                 {store.editingField === 'batchSize' ? (
                   <input 
@@ -511,36 +509,7 @@ export default function InputPanel() {
                 />
               </div>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-400 font-medium">Gradient Accumulation</span>
-                  <div onDoubleClick={() => store.setEditingField('gradAccum')}>
-                    {store.editingField === 'gradAccum' ? (
-                      <input 
-                        autoFocus type="text" inputMode="numeric"
-                        className="w-16 bg-accent-600/20 border border-accent-500/50 rounded px-2 py-0.5 text-right text-accent-400 font-mono font-bold text-xs outline-none"
-                        value={store.params.gradientAccumulationSteps}
-                        onChange={(e) => store.setParams({ gradientAccumulationSteps: Number(e.target.value.replace(/\D/g, '')) })}
-                        onBlur={() => store.setEditingField(null)}
-                        onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
-                      />
-                    ) : (
-                      <span className="text-accent-400 font-mono font-bold cursor-help border-b border-dotted border-accent-500/50">
-                        {store.params.gradientAccumulationSteps} steps
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <input 
-                  type="range" min="1" max="256" step="1"
-                  value={store.params.gradientAccumulationSteps}
-                  onChange={(e) => store.setParams({ gradientAccumulationSteps: Number(e.target.value) })}
-                  className="w-full accent-accent-500"
-                />
-                <div className="text-[10px] text-gray-500 flex justify-between px-1">
-                  <span>Global Batch: {(store.params.batchSize * (store.params.gradientAccumulationSteps || 1) * store.gpuCount).toLocaleString()}</span>
-                </div>
-              </div>
+
 
               <div className="flex flex-col gap-2 pt-2">
                 <label className="text-sm text-gray-400">Training Method</label>

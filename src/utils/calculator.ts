@@ -17,7 +17,6 @@ export interface SimulationParams {
   trainingMethod?: 'full' | 'lora';
   numSamples?: number;
   numEpochs?: number;
-  gradientAccumulationSteps?: number;
 }
 
 export interface TrainingMetrics {

@@ -95,7 +95,6 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     trainingMethod: 'lora',
     numSamples: 1000,
     numEpochs: 1,
-    gradientAccumulationSteps: 1,
   },
   setParams: (params) => set((state) => ({ params: { ...state.params, ...params } })),
 

@@ -106,7 +106,7 @@ export default function ResultsDashboard() {
             {isOom 
               ? `${totalUsedGb.toFixed(1)} GB 가 필요하지만, ${store.gpuCount}x ${selectedGpu.name} 장비의 가용 용량은 ${totalVramLimit} GB 입니다.`
               : store.params.isTraining 
-                ? `${totalVramLimit} GB 중 ${totalUsedGb.toFixed(1)} GB 사용 중입니다. (Global Batch: ${store.params.batchSize * (store.params.gradientAccumulationSteps || 1) * store.gpuCount})`
+                ? `${totalVramLimit} GB 중 ${totalUsedGb.toFixed(1)} GB 사용 중입니다.`
                 : `${totalVramLimit} GB 중 ${totalUsedGb.toFixed(1)} GB 사용 중입니다. (${hiddenGb}GB CUDA/시스템 예약 포함)`}
           </p>
         </div>
