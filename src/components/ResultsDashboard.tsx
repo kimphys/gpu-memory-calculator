@@ -1,9 +1,9 @@
 'use client';
 
 import { useSimulatorStore } from '../store/useSimulatorStore';
-import { calculateWeightsMemory, calculateKVCache, calculateTrainingMemory, estimateTPS } from '../utils/calculator';
+import { calculateWeightsMemory, calculateKVCache, calculateTrainingMemory, estimatePerformance, calculateTrainingMetrics, PerformanceMetrics, CUDA_OVERHEAD_GB } from '../utils/calculator';
 import { GPUS } from '../data/presets';
-import { Cpu, Zap, AlertTriangle, CheckCircle, Database } from 'lucide-react';
+import { Cpu, Zap, Users, Activity, CheckCircle, Database, AlertTriangle } from 'lucide-react';
 
 export default function ResultsDashboard() {
   const store = useSimulatorStore();
@@ -24,14 +24,44 @@ export default function ResultsDashboard() {
   // Math Computations
   const weightsGb = calculateWeightsMemory(activeModel.parametersInB, store.params.quantizationBits);
   const kvGb = calculateKVCache(activeModel, store.params);
-  const trainingGb = store.params.isTraining ? calculateTrainingMemory(weightsGb, store.params.trainingMethod) : 0;
   
-  const totalUsedGb = weightsGb + kvGb + trainingGb;
+  // High-Fidelity Training Memory Decomposition
+  let optGradGb = 0;
+  let activationGb = 0;
   
-  let tps = 0;
-  if (!store.params.isTraining && totalUsedGb <= totalVramLimit) {
-      const activeParams = activeModel.activeParametersInB || activeModel.parametersInB;
-      tps = estimateTPS(selectedGpu.bandwidthGbps, activeParams, store.params.quantizationBits, store.gpuCount);
+  if (store.params.isTraining) {
+    optGradGb = calculateTrainingMemory(activeModel, store.params.trainingMethod);
+    // Activation memory is fetched from the metrics computed later, but we need it for totalUsedGb
+    // We'll recompute it briefly here or restructure
+    const { calculateTrainingMetrics } = require('../utils/calculator');
+    const tMetrics = calculateTrainingMetrics(selectedGpu, activeModel, store.params, store.gpuCount);
+    activationGb = tMetrics.activationMemoryGb;
+  }
+  
+  const trainingGb = optGradGb + activationGb;
+  const hiddenGb = CUDA_OVERHEAD_GB;
+  
+  const totalUsedGb = weightsGb + kvGb + trainingGb + hiddenGb;
+  
+  let metrics: PerformanceMetrics = { totalThroughput: 0, speedPerUser: 0, ttftMs: 0, maxRps: 0 };
+  let trainingMetrics: any = null;
+  let maxConcurrency = 0;
+
+  if (!store.params.isTraining) {
+      if (totalUsedGb <= totalVramLimit) {
+        metrics = estimatePerformance(
+          { bandwidthGbps: selectedGpu.bandwidthGbps, tflops: (selectedGpu as any).tflops || 100 }, 
+          activeModel, store.params, store.gpuCount
+        );
+      }
+      const kvPerUser = kvGb / store.params.batchSize;
+      const availableForKV = totalVramLimit - weightsGb - trainingGb - hiddenGb;
+      maxConcurrency = kvPerUser > 0 ? Math.floor(availableForKV / kvPerUser) : 0;
+  } else {
+      trainingMetrics = calculateTrainingMetrics(
+        { bandwidthGbps: selectedGpu.bandwidthGbps, tflops: (selectedGpu as any).tflops || 100 },
+        activeModel, store.params, store.gpuCount
+      );
   }
 
   // Status computation
@@ -45,14 +75,23 @@ export default function ResultsDashboard() {
   const maxScale = Math.max(totalUsedGb, totalVramLimit);
   const weightsPct = (weightsGb / maxScale) * 100;
   const kvPct = (kvGb / maxScale) * 100;
-  const trainingPct = (trainingGb / maxScale) * 100;
+  const hiddenPct = (hiddenGb / maxScale) * 100;
+  const optGradPct = (optGradGb / maxScale) * 100;
+  const activationPct = (activationGb / maxScale) * 100;
   const overflowPct = isOom ? ((totalUsedGb - totalVramLimit) / maxScale) * 100 : 0;
 
+  // Helper for training time display
+  const formatTime = (hours: number) => {
+    if (hours < 1) return `${Math.round(hours * 60)}분`;
+    if (hours < 48) return `${hours.toFixed(1)}시간`;
+    return `${(hours / 24).toFixed(1)}일`;
+  };
+
   return (
-    <div className="glass-panel p-8 flex flex-col gap-8 h-full w-full overflow-y-auto">
+    <div className="glass-panel p-8 flex flex-col gap-8 w-full h-full">
       <div className="flex justify-between items-start">
         <h2 className="text-2xl font-bold flex items-center gap-3 text-white">
-          <Zap className="w-6 h-6 text-accent-500" /> Simulation Results
+          <Zap className="w-6 h-6 text-accent-500" /> 시뮬레이션 결과
         </h2>
       </div>
 
@@ -61,12 +100,14 @@ export default function ResultsDashboard() {
         {isOom ? <AlertTriangle className="w-12 h-12 text-error flex-shrink-0" /> : <CheckCircle className="w-12 h-12 text-success flex-shrink-0" />}
         <div>
           <h3 className={`text-2xl font-bold tracking-tight ${statusColor}`}>
-            {isOom ? 'OUT OF MEMORY (OOM)' : isWarning ? 'WARNING: HIGH VRAM USAGE' : 'SUCCESS: VRAM SUFFICIENT'}
+            {isOom ? '메모리 부족 (OOM)' : isWarning ? '경고: 높은 VRAM 점유율' : '정상: VRAM 용량 충분'}
           </h3>
           <p className="text-gray-300 mt-2 text-sm leading-relaxed">
             {isOom 
-              ? `Requires ${totalUsedGb.toFixed(1)} GB, but only ${totalVramLimit} GB is available on ${store.gpuCount}x ${selectedGpu.name}.`
-              : `Using ${totalUsedGb.toFixed(1)} GB out of ${totalVramLimit} GB available.`}
+              ? `${totalUsedGb.toFixed(1)} GB 가 필요하지만, ${store.gpuCount}x ${selectedGpu.name} 장비의 가용 용량은 ${totalVramLimit} GB 입니다.`
+              : store.params.isTraining 
+                ? `${totalVramLimit} GB 중 ${totalUsedGb.toFixed(1)} GB 사용 중입니다. (Global Batch: ${store.params.batchSize * (store.params.gradientAccumulationSteps || 1) * store.gpuCount})`
+                : `${totalVramLimit} GB 중 ${totalUsedGb.toFixed(1)} GB 사용 중입니다. (${hiddenGb}GB CUDA/시스템 예약 포함)`}
           </p>
         </div>
       </div>
@@ -74,7 +115,15 @@ export default function ResultsDashboard() {
       {/* VRAM Visualizer */}
       <div className="flex flex-col gap-4 mt-2">
         <div className="flex justify-between items-end">
-          <span className="font-medium text-gray-300">VRAM Allocation Breakdown</span>
+          <span className="font-medium text-gray-300 flex items-center gap-2">
+            VRAM 할당 세부 내역
+            <div className="group relative">
+              <Activity className="w-3 h-3 text-gray-500 cursor-help" />
+              <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-surface-200 border border-white/10 rounded-lg text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                PagedAttention 등의 동적 관리 덕분에 실제 사용량은 유동적일 수 있으나, 본 장비는 모든 토큰이 채워졌을 때의 피크 가동 상황을 기준으로 설계되었습니다.
+              </div>
+            </div>
+          </span>
           <span className={`text-sm font-mono font-bold ${isOom ? 'text-error animate-pulse' : 'text-gray-400'}`}>
             {totalUsedGb.toFixed(1)} GB / {totalVramLimit} GB
           </span>
@@ -83,60 +132,152 @@ export default function ResultsDashboard() {
         {/* Stacked Bar */}
         <div className="h-10 w-full bg-surface-200 rounded-full overflow-hidden flex shadow-inner relative border border-white/5">
           <div 
+            className="h-full bg-gray-600 transition-all duration-1000 ease-out"
+            style={{ width: `${hiddenPct}%` }}
+            title={`CUDA/시스템 예약: ${hiddenGb.toFixed(1)} GB`}
+          />
+          <div 
             className="h-full bg-primary-500 transition-all duration-1000 ease-out"
             style={{ width: `${weightsPct}%` }}
-            title={`Weights: ${weightsGb.toFixed(1)} GB`}
+            title={`모델 가중치: ${weightsGb.toFixed(1)} GB`}
           />
           <div 
             className="h-full bg-accent-500 transition-all duration-1000 ease-out"
             style={{ width: `${kvPct}%` }}
-            title={`KV Cache: ${kvGb.toFixed(1)} GB`}
+            title={`KV 캐시: ${kvGb.toFixed(1)} GB`}
           />
           {store.params.isTraining && (
-            <div 
-              className="h-full bg-warning transition-all duration-1000 ease-out"
-              style={{ width: `${trainingPct}%` }}
-              title={`Training Overhead: ${trainingGb.toFixed(1)} GB`}
-            />
+            <>
+              <div 
+                className="h-full bg-warning transition-all duration-1000 ease-out"
+                style={{ width: `${optGradPct}%` }}
+                title={`옵티마이저/그래디언트: ${optGradGb.toFixed(1)} GB`}
+              />
+              <div 
+                className="h-full bg-rose-400 transition-all duration-1000 ease-out"
+                style={{ width: `${activationPct}%` }}
+                title={`액티베이션 메모리: ${activationGb.toFixed(1)} GB`}
+              />
+            </>
           )}
           {isOom && (
              <div 
-               className="h-full bg-error transition-all duration-1000 pattern-diagonal-lines"
+               className="h-full bg-error transition-all duration-100 pattern-diagonal-lines"
                style={{ width: `${overflowPct}%` }}
-               title={`Shortfall: ${(totalUsedGb - totalVramLimit).toFixed(1)} GB`}
+               title={`부족분: ${(totalUsedGb - totalVramLimit).toFixed(1)} GB`}
              />
           )}
         </div>
 
         {/* Legend */}
         <div className="flex gap-4 mt-2 text-sm text-gray-400 flex-wrap">
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-primary-500"></div> Weights ({weightsGb.toFixed(1)} GB)</div>
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-accent-500"></div> KV Cache ({kvGb.toFixed(1)} GB)</div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-gray-600"></div> 시스템 예약 (CUDA/기타)</div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-primary-500"></div> 모델 가중치 ({weightsGb.toFixed(1)} GB)</div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-accent-500"></div> KV 캐시 ({kvGb.toFixed(1)} GB)</div>
           {store.params.isTraining && (
-            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-warning"></div> Training/Activations ({trainingGb.toFixed(1)} GB)</div>
+            <>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-warning"></div> 학습(Opt/Grad) ({optGradGb.toFixed(1)} GB)</div>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-rose-400"></div> 학습(Activation) ({activationGb.toFixed(1)} GB)</div>
+            </>
           )}
           {isOom && (
-             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-error font-bold text-error"></div> Shortfall ({(totalUsedGb - totalVramLimit).toFixed(1)} GB)</div>
+             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-error font-bold text-error"></div> 부족분 ({(totalUsedGb - totalVramLimit).toFixed(1)} GB)</div>
           )}
         </div>
       </div>
 
-      {/* Performance Matrix */}
-      {!store.params.isTraining && (
+      {/* 2x2 Performance Matrix */}
+      {!store.params.isTraining ? (
         <div className="mt-8 grid grid-cols-2 gap-4">
-          <div className="glass-panel !border-white/5 p-6 flex flex-col items-center justify-center text-center">
-            <Cpu className={`w-8 h-8 mb-2 ${isOom ? 'text-gray-600' : 'text-primary-500'}`} />
-            <span className="text-gray-400 text-sm uppercase tracking-wider font-semibold">Estimated Speed</span>
-            <span className={`text-4xl font-black mt-2 ${isOom ? 'text-gray-600' : 'text-white'}`}>
-              {tps.toLocaleString()} <span className="text-lg text-primary-500 font-normal tracking-tight">Tokens / sec</span>
+          <div className="glass-panel !border-white/5 p-4 flex flex-col items-center justify-center text-center">
+            <Cpu className={`w-6 h-6 mb-2 ${isOom ? 'text-gray-600' : 'text-primary-500'}`} />
+            <span className="text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Throughput (Tokens/sec)</span>
+            <span className={`text-2xl md:text-3xl font-black mt-1 ${isOom ? 'text-gray-600' : 'text-white'}`}>
+              {metrics.totalThroughput.toLocaleString()} <span className="text-sm text-primary-500 font-normal">t/s</span>
+            </span>
+            <span className={`text-[10px] mt-1 font-medium ${isOom ? 'text-gray-700' : 'text-gray-400'}`}>
+              ≈ 유저당 {metrics.speedPerUser.toLocaleString()} t/s 예상
             </span>
           </div>
-          
-          <div className="glass-panel !border-white/5 p-6 flex flex-col items-center justify-center text-center">
-            <Database className="w-8 h-8 text-accent-500 mb-2 opacity-80" />
-            <span className="text-gray-400 text-sm uppercase tracking-wider font-semibold">Memory Bandwidth</span>
-            <span className="text-4xl font-black text-white mt-2">
-              {(selectedGpu.bandwidthGbps * store.gpuCount).toLocaleString()} <span className="text-xl text-accent-500 font-normal">GB/s</span>
+
+          <div className="glass-panel !border-white/5 p-4 flex flex-col items-center justify-center text-center">
+            <Users className={`w-6 h-6 mb-2 ${isOom ? 'text-gray-600' : 'text-accent-500'}`} />
+            <span className="text-gray-400 text-[10px] uppercase tracking-wider font-semibold">최대 동시 추론 (Concurrency)</span>
+            <span className={`text-2xl md:text-3xl font-black mt-1 ${isOom ? 'text-gray-600' : 'text-white'}`}>
+              {Math.max(0, maxConcurrency).toLocaleString()} <span className="text-sm text-accent-500 font-normal">명</span>
+            </span>
+            <span className={`text-[10px] mt-1 font-medium ${isOom ? 'text-gray-700' : 'text-gray-400'}`}>
+              OOM 없이 수용 가능한 최대 유저
+            </span>
+          </div>
+
+          <div className="glass-panel !border-white/5 p-4 flex flex-col items-center justify-center text-center">
+            <Zap className={`w-6 h-6 mb-2 ${isOom ? 'text-gray-600' : 'text-yellow-500'}`} />
+            <span className="text-gray-400 text-[10px] uppercase tracking-wider font-semibold">예상 TTFT (First Token)</span>
+            <span className={`text-2xl md:text-3xl font-black mt-1 ${isOom ? 'text-gray-600' : 'text-white'}`}>
+              {metrics.ttftMs.toLocaleString()} <span className="text-sm text-yellow-500 font-normal">ms</span>
+            </span>
+            <span className={`text-[10px] mt-1 font-medium ${isOom ? 'text-gray-700' : 'text-gray-400'}`}>
+              첫 토큰 생성 지연 시간 (Prefill)
+            </span>
+          </div>
+
+          <div className="glass-panel !border-white/5 p-4 flex flex-col items-center justify-center text-center">
+            <Activity className={`w-6 h-6 mb-2 ${isOom ? 'text-gray-600' : 'text-rose-500'}`} />
+            <span className="text-gray-400 text-[10px] uppercase tracking-wider font-semibold">최대 RPS 처리 용량</span>
+            <span className={`text-2xl md:text-3xl font-black mt-1 ${isOom ? 'text-gray-600' : 'text-white'}`}>
+              {metrics.maxRps.toLocaleString()} <span className="text-sm text-rose-500 font-normal">Req/s</span>
+            </span>
+            <span className={`text-[10px] mt-1 font-medium ${isOom ? 'text-gray-700' : 'text-gray-400'}`}>
+              단위 시간당 요청 완결 가능 횟수
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-8 grid grid-cols-2 gap-4">
+          <div className="glass-panel !border-white/5 p-4 flex flex-col items-center justify-center text-center">
+            <Zap className={`w-6 h-6 mb-2 ${isOom ? 'text-gray-600' : 'text-warning'}`} />
+            <span className="text-gray-400 text-[10px] uppercase tracking-wider font-semibold">예상 학습 소요 시간</span>
+            <span className={`text-2xl md:text-3xl font-black mt-1 ${isOom ? 'text-gray-600' : 'text-white'}`}>
+              {isOom ? '-' : formatTime(trainingMetrics?.estimatedHours || 0)}
+            </span>
+            <span className={`text-[10px] mt-1 font-medium ${isOom ? 'text-gray-700' : 'text-gray-400'}`}>
+              {store.params.numEpochs} Epoch 완료 기준
+            </span>
+          </div>
+
+          <div className="glass-panel !border-white/5 p-4 flex flex-col items-center justify-center text-center">
+            <Database className={`w-6 h-6 mb-2 ${isOom ? 'text-gray-600' : 'text-blue-400'}`} />
+            <span className="text-gray-400 text-[10px] uppercase tracking-wider font-semibold">총 학습 토큰 수</span>
+            <span className={`text-2xl md:text-3xl font-black mt-1 ${isOom ? 'text-gray-600' : 'text-white'}`}>
+               {isOom ? '-' : (trainingMetrics?.totalTokens / 1e6).toFixed(1)} <span className="text-sm text-blue-400 font-normal">M</span>
+            </span>
+            <span className={`text-[10px] mt-1 font-medium ${isOom ? 'text-gray-700' : 'text-gray-400'}`}>
+              Samples * Epochs * Context
+            </span>
+          </div>
+
+          <div className="glass-panel !border-white/5 p-4 flex flex-col items-center justify-center text-center">
+            <Cpu className={`w-6 h-6 mb-2 ${isOom ? 'text-gray-600' : 'text-primary-400'}`} />
+            <span className="text-gray-400 text-[10px] uppercase tracking-wider font-semibold">총 연산량 (Total FLOPs)</span>
+            <span className={`text-2xl md:text-3xl font-black mt-1 ${isOom ? 'text-gray-600' : 'text-white'}`}>
+               {isOom ? '-' : (trainingMetrics?.totalFlops / 1e18).toFixed(1)} <span className="text-sm text-primary-400 font-normal">E</span>
+            </span>
+            <span className={`text-[10px] mt-1 font-medium ${isOom ? 'text-gray-700' : 'text-gray-400'}`}>
+               {isOom ? '-' : 'ExaFLOPs (10^18)'}
+            </span>
+          </div>
+
+          <div className="glass-panel !border-white/5 p-4 flex flex-col items-center justify-center text-center">
+            <Activity className={`w-6 h-6 mb-2 ${isOom ? 'text-gray-600' : 'text-accent-400'}`} />
+            <span className="text-gray-400 text-[10px] uppercase tracking-wider font-semibold">학습 Throughput (가동률 반영)</span>
+            <span className={`text-2xl md:text-3xl font-black mt-1 ${isOom ? 'text-gray-600' : 'text-white'}`}>
+               {isOom ? '-' : Math.floor(trainingMetrics?.totalTokens / (trainingMetrics?.estimatedHours * 3600)).toLocaleString()} <span className="text-sm text-accent-400 font-normal">t/s</span>
+            </span>
+            <span className={`text-[10px] mt-1 font-medium ${isOom ? 'text-gray-700' : 'text-gray-400'}`}>
+              하드웨어 가속기 활용도(MFU): {( 
+                (1 - Math.exp(- (0.25 * Math.sqrt(100 / (selectedGpu.tflops || 100))) * (store.params.batchSize || 1))) * 45 
+              ).toFixed(1)}%
             </span>
           </div>
         </div>
@@ -145,23 +286,23 @@ export default function ResultsDashboard() {
       {/* Recommendations */}
       <div className="mt-auto pt-8 border-t border-white/5">
         <h4 className="font-bold text-gray-200 mb-3 flex items-center gap-2">
-           💡 AI Recommendations
+           💡 AI 권장 사항 (Recommendations)
         </h4>
         <ul className="list-inside text-sm text-gray-400 space-y-3">
           {isOom && store.params.quantizationBits === 16 && (
-            <li className="flex gap-2 items-start"><span className="text-primary-500 mt-0.5">•</span> <span>Try reducing precision to <strong className="text-accent-500">INT8 or INT4 quantization</strong>. This will significantly drop the weights memory.</span></li>
+            <li className="flex gap-2 items-start"><span className="text-primary-500 mt-0.5">•</span> <span>정밀도를 <strong className="text-accent-500">INT8 또는 INT4 양자화</strong>로 낮춰보세요. 모델 가중치 메모리를 비약적으로 줄일 수 있습니다.</span></li>
           )}
-          {isOom && store.params.contextLength > 4096 && (
-            <li className="flex gap-2 items-start"><span className="text-primary-500 mt-0.5">•</span> <span>Your KV Cache is large. Consider reducing the <strong>Context Length</strong>.</span></li>
+          {isOom && (store.params.inputLength + store.params.outputLength) > 4096 && (
+            <li className="flex gap-2 items-start"><span className="text-primary-500 mt-0.5">•</span> <span>총 컨텍스트 길이가 너무 깁니다. <strong>Input Prompt</strong> 또는 <strong>Max Output</strong> 한도를 줄이는 것을 권장합니다.</span></li>
           )}
           {isOom && store.params.isTraining && store.params.trainingMethod === 'full' && (
-            <li className="flex gap-2 items-start"><span className="text-primary-500 mt-0.5">•</span> <span>Full Fine-tuning takes massive VRAM. Switch to <strong className="text-primary-500">PEFT / LoRA</strong> to train efficiently on fewer GPUs.</span></li>
+            <li className="flex gap-2 items-start"><span className="text-primary-500 mt-0.5">•</span> <span>Full Fine-tuning은 막대한 VRAM을 소모합니다. <strong className="text-primary-500">PEFT / LoRA</strong> 방식으로 전환하여 학습 효율을 높여보세요.</span></li>
           )}
           {isOom && (
-             <li className="flex gap-2 items-start"><span className="text-primary-500 mt-0.5">•</span> <span>Increase the <strong>GPU Count</strong> or upgrade from {selectedGpu.name} to a larger VRAM instance (e.g. H200 141GB).</span></li>
+             <li className="flex gap-2 items-start"><span className="text-primary-500 mt-0.5">•</span> <span><strong>GPU 개수</strong>를 늘리거나, {selectedGpu.name}보다 VRAM이 더 큰 인스턴스(예: H200 141GB)로 업그레이드하세요.</span></li>
           )}
           {!isOom && !isWarning && (
-            <li className="flex gap-2 items-start"><span className="text-success mt-0.5">✓</span> <span>Plenty of VRAM headroom available. You could increase the <strong>Batch Size</strong> to maximize throughput.</span></li>
+            <li className="flex gap-2 items-start"><span className="text-success mt-0.5">✓</span> <span>VRAM 여유 공간이 충분합니다. <strong>배치 사이즈(Batch Size)</strong>를 늘려 전체 처리량을 극대화할 수 있습니다.</span></li>
           )}
         </ul>
       </div>

@@ -1,14 +1,14 @@
 import { ModelConfig } from '../utils/calculator';
 
 export const GPUS = [
-  { id: 'h200-141', name: 'NVIDIA H200 (141GB)', vramGb: 141, bandwidthGbps: 4800 },
-  { id: 'h100-80', name: 'NVIDIA H100 (80GB)', vramGb: 80, bandwidthGbps: 3350 },
-  { id: 'a100-80', name: 'NVIDIA A100 (80GB)', vramGb: 80, bandwidthGbps: 2039 },
-  { id: 'a100-40', name: 'NVIDIA A100 (40GB)', vramGb: 40, bandwidthGbps: 1555 },
-  { id: 'l40s-48', name: 'NVIDIA L40S (48GB)', vramGb: 48, bandwidthGbps: 864 },
-  { id: 'a30-24', name: 'NVIDIA A30 (24GB)', vramGb: 24, bandwidthGbps: 933 },
-  { id: 'rtx4090-24', name: 'RTX 4090 (24GB)', vramGb: 24, bandwidthGbps: 1008 },
-  { id: 'rtx3090-24', name: 'RTX 3090 (24GB)', vramGb: 24, bandwidthGbps: 936 },
+  { id: 'h200-141', name: 'NVIDIA H200 (141GB)', vramGb: 141, bandwidthGbps: 4800, tflops: 989 },
+  { id: 'h100-80', name: 'NVIDIA H100 (80GB)', vramGb: 80, bandwidthGbps: 3350, tflops: 989 },
+  { id: 'a100-80', name: 'NVIDIA A100 (80GB)', vramGb: 80, bandwidthGbps: 2039, tflops: 312 },
+  { id: 'a100-40', name: 'NVIDIA A100 (40GB)', vramGb: 40, bandwidthGbps: 1555, tflops: 312 },
+  { id: 'l40s-48', name: 'NVIDIA L40S (48GB)', vramGb: 48, bandwidthGbps: 864, tflops: 362 },
+  { id: 'a30-24', name: 'NVIDIA A30 (24GB)', vramGb: 24, bandwidthGbps: 933, tflops: 165 },
+  { id: 'rtx4090-24', name: 'RTX 4090 (24GB)', vramGb: 24, bandwidthGbps: 1008, tflops: 330 },
+  { id: 'rtx3090-24', name: 'RTX 3090 (24GB)', vramGb: 24, bandwidthGbps: 936, tflops: 142 },
 ];
 
 export const QUANTIZATION_OPTIONS = [

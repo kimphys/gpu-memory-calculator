@@ -7,8 +7,57 @@ export interface HFModelConfigRaw {
   num_attention_heads?: number;
   num_key_value_heads?: number;
   vocab_size?: number;
+  intermediate_size?: number;
   num_local_experts?: number;
   num_experts_per_tok?: number;
+}
+
+export function parseRawConfig(data: HFModelConfigRaw, modelId?: string): ModelConfig {
+    const hiddenSize = data.hidden_size || 4096;
+    const numLayers = data.num_hidden_layers || 32;
+    const numAttentionHeads = data.num_attention_heads || 32;
+    const numKeyValueHeads = data.num_key_value_heads || numAttentionHeads;
+    const intermediateSize = data.intermediate_size || (hiddenSize * 4); // Fallback for standard MLP
+    const vocabSize = data.vocab_size || 32000;
+    const numExperts = data.num_local_experts || 0;
+    const numActiveExperts = data.num_experts_per_tok || 0;
+
+    let parametersInB = modelId ? extractParamsFromModelId(modelId) : null;
+    let activeParametersInB: number | undefined = undefined;
+    
+    // Advanced Parameter Estimation Heuristic
+    if (!parametersInB) {
+      const embeddingParams = vocabSize * hiddenSize;
+      const attentionParams = numLayers * 4 * (hiddenSize ** 2);
+      
+      let mlpParams = 0;
+      if (numExperts > 0) {
+        // MoE: Experts * (W1 + W2 + W3) * hidden * intermediate
+        mlpParams = numLayers * numExperts * 3 * hiddenSize * intermediateSize;
+      } else {
+        // Dense: (W1 + W2 + W3) * hidden * intermediate
+        mlpParams = numLayers * 3 * hiddenSize * intermediateSize;
+      }
+
+      parametersInB = Math.round((embeddingParams + attentionParams + mlpParams) / 1e8) / 10;
+    }
+
+    // Active Parameters Estimation
+    if (numExperts > 0 && numActiveExperts > 0) {
+        const embeddingParams = vocabSize * hiddenSize;
+        const attentionParams = numLayers * 4 * (hiddenSize ** 2);
+        const activeMlpParams = numLayers * numActiveExperts * 3 * hiddenSize * intermediateSize;
+        activeParametersInB = Math.round((embeddingParams + attentionParams + activeMlpParams) / 1e8) / 10;
+    }
+
+    return {
+      parametersInB: parametersInB || 8,
+      activeParametersInB,
+      hiddenSize,
+      numLayers,
+      numAttentionHeads,
+      numKeyValueHeads,
+    };
 }
 
 export async function fetchHFModelConfig(modelUrlOrId: string): Promise<ModelConfig | null> {
@@ -24,36 +73,7 @@ export async function fetchHFModelConfig(modelUrlOrId: string): Promise<ModelCon
     }
 
     const data: HFModelConfigRaw = await response.json();
-    
-    const hiddenSize = data.hidden_size || 4096;
-    const numLayers = data.num_hidden_layers || 32;
-    const numAttentionHeads = data.num_attention_heads || 32;
-    const numKeyValueHeads = data.num_key_value_heads || numAttentionHeads; // fallback for non-GQA
-
-    let parametersInB = extractParamsFromModelId(parsedId);
-    let activeParametersInB: number | undefined = undefined;
-    
-    if (!parametersInB) {
-      const roughParams = (12 * numLayers * (hiddenSize ** 2)) / 1e9;
-      parametersInB = Math.round(roughParams);
-    }
-
-    // MoE Architecture Detection (e.g. Mixtral, Qwen MoE)
-    if (data.num_local_experts && data.num_experts_per_tok) {
-      // Rough heuristic for Active Parameters if Safetensors sizes are missing:
-      // Ratio modeling shared attention vs split MLPs
-      const ratio = (data.num_experts_per_tok + 1) / (data.num_local_experts + 1);
-      activeParametersInB = Math.round(parametersInB * ratio * 10) / 10;
-    }
-
-    return {
-      parametersInB: parametersInB || 8, // fallback to 8B if estimation fails
-      activeParametersInB,
-      hiddenSize,
-      numLayers,
-      numAttentionHeads,
-      numKeyValueHeads,
-    };
+    return parseRawConfig(data, parsedId);
   } catch (error) {
     console.error("Error parsing HF config:", error);
     return null;

@@ -3,7 +3,7 @@
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { MODEL_PRESETS, GPUS, QUANTIZATION_OPTIONS } from '../data/presets';
 import { fetchHFModelConfig } from '../utils/huggingface';
-import { Server, Database, Activity, UploadCloud } from 'lucide-react';
+import { Server, Database, Activity, UploadCloud, CheckCircle } from 'lucide-react';
 
 export default function InputPanel() {
   const store = useSimulatorStore();
@@ -22,7 +22,7 @@ export default function InputPanel() {
   };
 
   return (
-    <div className="glass-panel p-6 flex flex-col gap-8 h-full overflow-y-auto w-full">
+    <div className="glass-panel p-6 md:p-8 flex flex-col gap-8 w-full h-full">
       
       {/* 1. Model Selection */}
       <section className="flex flex-col gap-4">
@@ -82,10 +82,54 @@ export default function InputPanel() {
                   {store.isFetchingHf ? 'Parsing config...' : <><UploadCloud className="w-4 h-4" /> Fetch Config</>}
                 </button>
               </div>
-              {store.hfError && <p className="text-red-400 text-sm mt-1">{store.hfError}</p>}
+              
+              <div className="flex flex-col gap-2 mt-4 px-1">
+                <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                  <div className="h-px flex-1 bg-white/5"></div>
+                  <span>OR</span>
+                  <div className="h-px flex-1 bg-white/5"></div>
+                </div>
+                
+                <label className="flex flex-col items-center justify-center w-full py-3 px-4 border-2 border-dashed border-white/5 rounded-xl bg-white/2 cursor-pointer hover:bg-white/5 hover:border-primary-500/30 transition-all group">
+                  <div className="flex items-center gap-3">
+                    <Database className="w-5 h-5 text-gray-500 group-hover:text-primary-400 transition-colors" />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-gray-400 group-hover:text-white transition-colors">Upload config.json</span>
+                      <span className="text-[10px] text-gray-600">HuggingFace format JSON</span>
+                    </div>
+                  </div>
+                  <input 
+                    type="file" 
+                    accept=".json"
+                    className="hidden" 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        try {
+                          const json = JSON.parse(event.target?.result as string);
+                          const { parseRawConfig } = require('../utils/huggingface');
+                          const config = parseRawConfig(json);
+                          store.setHfConfig(config);
+                          store.setHfError(null);
+                        } catch (err) {
+                          store.setHfError('Invalid config.json file.');
+                        }
+                      };
+                      reader.readAsText(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              {store.hfError && <p className="text-red-400 text-sm mt-3 bg-red-500/10 p-2 rounded border border-red-500/20">{store.hfError}</p>}
               {store.hfConfig && (
-                <div className="mt-2 text-sm text-green-400 bg-green-500/10 p-2 rounded border border-green-500/20">
-                  Successfully loaded! (~{store.hfConfig.parametersInB}B params)
+                <div className="mt-3 text-xs text-green-400 bg-green-500/10 p-3 rounded border border-green-500/20 flex flex-col gap-1">
+                  <div className="font-bold flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Model Loaded Successfully</div>
+                  <div className="text-gray-400 text-[10px] mt-0.5">
+                    {store.hfConfig.parametersInB}B Params • {store.hfConfig.hiddenSize} Hidden • {store.hfConfig.numLayers} Layers
+                  </div>
                 </div>
               )}
             </div>
@@ -95,45 +139,129 @@ export default function InputPanel() {
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400">Total Params (B)</label>
-                <input 
-                  type="number" title="Parameters (B)" className="glass-input !py-1"
-                  value={store.customConfig.parametersInB}
-                  onChange={(e) => store.setCustomConfig({ parametersInB: Number(e.target.value) })}
-                />
+                <div onDoubleClick={() => store.setEditingField('custom_params')}>
+                  {store.editingField === 'custom_params' ? (
+                    <input 
+                      autoFocus type="text" inputMode="numeric"
+                      className="glass-input !py-1 w-full text-right"
+                      value={store.customConfig.parametersInB}
+                      onChange={(e) => store.setCustomConfig({ parametersInB: Number(e.target.value.replace(/\D/g, '')) })}
+                      onBlur={() => store.setEditingField(null)}
+                      onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                    />
+                  ) : (
+                    <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
+                      <span className="text-gray-500 text-[10px] uppercase">Billion</span>
+                      <span className="text-white font-mono">{store.customConfig.parametersInB}</span>
+                    </div>
+                  )}
+                </div>
               </div>
+
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-accent-500 font-medium">Active Params (MoE)</label>
-                <input 
-                  type="number" title="Active Parameters (Optional for MoE)" 
-                  className="glass-input !py-1"
-                  placeholder="Dense면 비워두세요"
-                  value={store.customConfig.activeParametersInB || ''}
-                  onChange={(e) => store.setCustomConfig({ activeParametersInB: e.target.value ? Number(e.target.value) : undefined })}
-                />
+                <label className="text-xs text-accent-400 font-medium">Active Params (MoE)</label>
+                <div onDoubleClick={() => store.setEditingField('custom_active')}>
+                  {store.editingField === 'custom_active' ? (
+                    <input 
+                      autoFocus type="text" inputMode="numeric"
+                      className="glass-input !py-1 w-full text-right"
+                      placeholder="Dense면 비워두세요"
+                      value={store.customConfig.activeParametersInB || ''}
+                      onChange={(e) => store.setCustomConfig({ activeParametersInB: e.target.value ? Number(e.target.value.replace(/\D/g, '')) : undefined })}
+                      onBlur={() => store.setEditingField(null)}
+                      onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                    />
+                  ) : (
+                    <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
+                      <span className="text-accent-500/50 text-[10px] uppercase">Active</span>
+                      <span className="text-accent-400 font-mono italic">{store.customConfig.activeParametersInB || 'Dense'}</span>
+                    </div>
+                  )}
+                </div>
               </div>
+
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400">Hidden Size</label>
-                <input 
-                  type="number" title="Hidden Size" className="glass-input !py-1"
-                  value={store.customConfig.hiddenSize}
-                  onChange={(e) => store.setCustomConfig({ hiddenSize: Number(e.target.value) })}
-                />
+                <div onDoubleClick={() => store.setEditingField('custom_hidden')}>
+                  {store.editingField === 'custom_hidden' ? (
+                    <input 
+                      autoFocus type="text" inputMode="numeric"
+                      className="glass-input !py-1 w-full text-right"
+                      value={store.customConfig.hiddenSize}
+                      onChange={(e) => store.setCustomConfig({ hiddenSize: Number(e.target.value.replace(/\D/g, '')) })}
+                      onBlur={() => store.setEditingField(null)}
+                      onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                    />
+                  ) : (
+                    <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
+                       <span className="text-gray-500 text-[10px] uppercase">Dim</span>
+                       <span className="text-white font-mono">{store.customConfig.hiddenSize}</span>
+                    </div>
+                  )}
+                </div>
               </div>
+
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400">Layers</label>
-                <input 
-                  type="number" title="Layers" className="glass-input !py-1"
-                  value={store.customConfig.numLayers}
-                  onChange={(e) => store.setCustomConfig({ numLayers: Number(e.target.value) })}
-                />
+                <div onDoubleClick={() => store.setEditingField('custom_layers')}>
+                  {store.editingField === 'custom_layers' ? (
+                    <input 
+                      autoFocus type="text" inputMode="numeric"
+                      className="glass-input !py-1 w-full text-right"
+                      value={store.customConfig.numLayers}
+                      onChange={(e) => store.setCustomConfig({ numLayers: Number(e.target.value.replace(/\D/g, '')) })}
+                      onBlur={() => store.setEditingField(null)}
+                      onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                    />
+                  ) : (
+                    <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
+                      <span className="text-gray-500 text-[10px] uppercase">Blocks</span>
+                      <span className="text-white font-mono">{store.customConfig.numLayers}</span>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400">Attention Heads</label>
+                <div onDoubleClick={() => store.setEditingField('custom_att_heads')}>
+                  {store.editingField === 'custom_att_heads' ? (
+                    <input 
+                      autoFocus type="text" inputMode="numeric"
+                      className="glass-input !py-1 w-full text-right"
+                      value={store.customConfig.numAttentionHeads}
+                      onChange={(e) => store.setCustomConfig({ numAttentionHeads: Number(e.target.value.replace(/\D/g, '')) })}
+                      onBlur={() => store.setEditingField(null)}
+                      onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                    />
+                  ) : (
+                    <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
+                      <span className="text-gray-500 text-[10px] uppercase">Query</span>
+                      <span className="text-white font-mono">{store.customConfig.numAttentionHeads}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400">KV Heads</label>
-                <input 
-                  type="number" title="KV Heads" className="glass-input !py-1"
-                  value={store.customConfig.numKeyValueHeads}
-                  onChange={(e) => store.setCustomConfig({ numKeyValueHeads: Number(e.target.value) })}
-                />
+                <div onDoubleClick={() => store.setEditingField('custom_kv_heads')}>
+                  {store.editingField === 'custom_kv_heads' ? (
+                    <input 
+                      autoFocus type="text" inputMode="numeric"
+                      className="glass-input !py-1 w-full text-right"
+                      value={store.customConfig.numKeyValueHeads}
+                      onChange={(e) => store.setCustomConfig({ numKeyValueHeads: Number(e.target.value.replace(/\D/g, '')) })}
+                      onBlur={() => store.setEditingField(null)}
+                      onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                    />
+                  ) : (
+                    <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
+                      <span className="text-gray-500 text-[10px] uppercase">GQA/MQA</span>
+                      <span className="text-white font-mono">{store.customConfig.numKeyValueHeads}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -141,16 +269,27 @@ export default function InputPanel() {
         
         <div className="flex flex-col gap-2">
           <label className="text-sm text-gray-400">Weight Precision / Quantization</label>
-          <select 
-            title="Precision" className="glass-input"
-            value={store.params.quantizationBits}
-            onChange={(e) => store.setParams({ quantizationBits: Number(e.target.value) })}
-          >
-            {QUANTIZATION_OPTIONS.map((q) => (
-              <option key={q.id} value={q.bits} className="bg-[#1a1d24]">{q.name}</option>
-            ))}
-          </select>
-        </div>
+            <select 
+                title="Weights Quantization" className="glass-input"
+                value={store.params.quantizationBits}
+                onChange={(e) => store.setParams({ quantizationBits: Number(e.target.value) })}
+              >
+                {QUANTIZATION_OPTIONS.map((q) => (
+                  <option key={q.id} value={q.bits} className="bg-[#1a1d24]">{q.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm text-gray-400">KV Quantization</label>
+              <select 
+                title="KV Cache Quantization" className="glass-input"
+                value={store.params.kvQuantizationBits}
+                onChange={(e) => store.setParams({ kvQuantizationBits: Number(e.target.value) })}
+              >
+                <option value={16} className="bg-[#1a1d24]">16-bit (Default)</option>
+                <option value={8} className="bg-[#1a1d24]">8-bit (FP8/INT8)</option>
+              </select>
+            </div>
       </section>
 
       {/* 2. Hardware Selection */}
@@ -212,22 +351,98 @@ export default function InputPanel() {
         <div className="flex flex-col gap-4 p-4 bg-surface-50 rounded-xl border border-white/5">
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-400">Context Length (Tokens)</span>
-              <span className="text-white font-mono">{store.params.contextLength.toLocaleString()}</span>
+              <span className="text-gray-400">Input Prompt Limit (Tokens)</span>
+              <div onDoubleClick={() => store.setEditingField('inputLength')}>
+                {store.editingField === 'inputLength' ? (
+                  <input 
+                    autoFocus
+                    type="text"
+                    inputMode="numeric"
+                    className="w-24 bg-primary-600/20 border border-primary-500/50 rounded px-2 py-0.5 text-right text-primary-400 font-mono font-bold text-xs outline-none"
+                    value={store.params.inputLength}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      store.setParams({ inputLength: val ? Number(val) : 0 });
+                    }}
+                    onBlur={() => store.setEditingField(null)}
+                    onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                  />
+                ) : (
+                  <span className="text-primary-400 font-mono font-bold cursor-help border-b border-dotted border-primary-500/50" title="Double-click to type">
+                    {store.params.inputLength.toLocaleString()}
+                  </span>
+                )}
+              </div>
             </div>
             <input 
-              title="Context Length" type="range" 
-              min="1024" max="131072" step="1024"
-              value={store.params.contextLength}
-              onChange={(e) => store.setParams({ contextLength: Number(e.target.value) })}
+              title="Input Prompt Length" type="range" 
+              min="128" max="131072" step="128"
+              value={store.params.inputLength}
+              onChange={(e) => store.setParams({ inputLength: Number(e.target.value) })}
               className="w-full accent-primary-500"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-400">Max Generated Output (Tokens)</span>
+              <div onDoubleClick={() => store.setEditingField('outputLength')}>
+                {store.editingField === 'outputLength' ? (
+                  <input 
+                    autoFocus
+                    type="text"
+                    inputMode="numeric"
+                    className="w-24 bg-accent-600/20 border border-accent-500/50 rounded px-2 py-0.5 text-right text-accent-400 font-mono font-bold text-xs outline-none"
+                    value={store.params.outputLength}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      store.setParams({ outputLength: val ? Number(val) : 0 });
+                    }}
+                    onBlur={() => store.setEditingField(null)}
+                    onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                  />
+                ) : (
+                  <span className="text-accent-400 font-mono font-bold cursor-help border-b border-dotted border-accent-500/50" title="Double-click to type">
+                    {store.params.outputLength.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
+            <input 
+              title="Max Output Length" type="range" 
+              min="128" max="131072" step="128"
+              value={store.params.outputLength}
+              onChange={(e) => store.setParams({ outputLength: Number(e.target.value) })}
+              className="w-full accent-accent-500"
             />
           </div>
           
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-400">Batch Size</span>
-              <span className="text-white font-mono">{store.params.batchSize}</span>
+              <span className="text-gray-400 font-medium">
+                {store.params.isTraining ? 'Micro Batch Size (per GPU)' : 'Batch Size'}
+              </span>
+              <div onDoubleClick={() => store.setEditingField('batchSize')}>
+                {store.editingField === 'batchSize' ? (
+                  <input 
+                    autoFocus
+                    type="text"
+                    inputMode="numeric"
+                    className="w-16 bg-white/10 border border-white/20 rounded px-2 py-0.5 text-right text-white font-mono font-bold text-xs outline-none"
+                    value={store.params.batchSize}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      store.setParams({ batchSize: val ? Number(val) : 0 });
+                    }}
+                    onBlur={() => store.setEditingField(null)}
+                    onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                  />
+                ) : (
+                  <span className="text-white font-mono font-bold cursor-help border-b border-dotted border-white/30" title="Double-click to type">
+                    {store.params.batchSize}
+                  </span>
+                )}
+              </div>
             </div>
             <input 
               title="Batch Size" type="range" 
@@ -239,17 +454,106 @@ export default function InputPanel() {
           </div>
           
           {store.params.isTraining && (
-            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
-              <label className="text-sm text-gray-400">Training Method</label>
-              <select 
-                title="Training Method" className="glass-input"
-                value={store.params.trainingMethod}
-                onChange={(e) => store.setParams({ trainingMethod: e.target.value as any })}
-              >
-                <option value="lora" className="bg-[#1a1d24]">PEFT / LoRA</option>
-                <option value="full" className="bg-[#1a1d24]">Full Fine-Tuning</option>
-              </select>
-            </div>
+            <>
+              <div className="flex flex-col gap-2 pt-4 border-t border-white/10">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-400 font-medium">Dataset Size (Samples)</span>
+                  <div onDoubleClick={() => store.setEditingField('numSamples')}>
+                    {store.editingField === 'numSamples' ? (
+                      <input 
+                        autoFocus type="text" inputMode="numeric"
+                        className="w-24 bg-accent-600/20 border border-accent-500/50 rounded px-2 py-0.5 text-right text-accent-400 font-mono font-bold text-xs outline-none"
+                        value={store.params.numSamples}
+                        onChange={(e) => store.setParams({ numSamples: Number(e.target.value.replace(/\D/g, '')) })}
+                        onBlur={() => store.setEditingField(null)}
+                        onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                      />
+                    ) : (
+                      <span className="text-accent-400 font-mono font-bold cursor-help border-b border-dotted border-accent-500/50">
+                        {store.params.numSamples?.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <input 
+                  type="range" min="100" max="1000000" step="100"
+                  value={store.params.numSamples}
+                  onChange={(e) => store.setParams({ numSamples: Number(e.target.value) })}
+                  className="w-full accent-accent-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-400 font-medium">Training Epochs</span>
+                  <div onDoubleClick={() => store.setEditingField('numEpochs')}>
+                    {store.editingField === 'numEpochs' ? (
+                      <input 
+                        autoFocus type="text" inputMode="numeric"
+                        className="w-16 bg-accent-600/20 border border-accent-500/50 rounded px-2 py-0.5 text-right text-accent-400 font-mono font-bold text-xs outline-none"
+                        value={store.params.numEpochs}
+                        onChange={(e) => store.setParams({ numEpochs: Number(e.target.value.replace(/\D/g, '')) })}
+                        onBlur={() => store.setEditingField(null)}
+                        onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                      />
+                    ) : (
+                      <span className="text-accent-400 font-mono font-bold cursor-help border-b border-dotted border-accent-500/50">
+                        {store.params.numEpochs}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <input 
+                  type="range" min="1" max="100" step="1"
+                  value={store.params.numEpochs}
+                  onChange={(e) => store.setParams({ numEpochs: Number(e.target.value) })}
+                  className="w-full accent-accent-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-400 font-medium">Gradient Accumulation</span>
+                  <div onDoubleClick={() => store.setEditingField('gradAccum')}>
+                    {store.editingField === 'gradAccum' ? (
+                      <input 
+                        autoFocus type="text" inputMode="numeric"
+                        className="w-16 bg-accent-600/20 border border-accent-500/50 rounded px-2 py-0.5 text-right text-accent-400 font-mono font-bold text-xs outline-none"
+                        value={store.params.gradientAccumulationSteps}
+                        onChange={(e) => store.setParams({ gradientAccumulationSteps: Number(e.target.value.replace(/\D/g, '')) })}
+                        onBlur={() => store.setEditingField(null)}
+                        onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                      />
+                    ) : (
+                      <span className="text-accent-400 font-mono font-bold cursor-help border-b border-dotted border-accent-500/50">
+                        {store.params.gradientAccumulationSteps} steps
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <input 
+                  type="range" min="1" max="256" step="1"
+                  value={store.params.gradientAccumulationSteps}
+                  onChange={(e) => store.setParams({ gradientAccumulationSteps: Number(e.target.value) })}
+                  className="w-full accent-accent-500"
+                />
+                <div className="text-[10px] text-gray-500 flex justify-between px-1">
+                  <span>Global Batch: {(store.params.batchSize * (store.params.gradientAccumulationSteps || 1) * store.gpuCount).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 pt-2">
+                <label className="text-sm text-gray-400">Training Method</label>
+                <select 
+                  title="Training Method" className="glass-input"
+                  value={store.params.trainingMethod}
+                  onChange={(e) => store.setParams({ trainingMethod: e.target.value as any })}
+                >
+                  <option value="lora" className="bg-[#1a1d24]">PEFT / LoRA (Efficient)</option>
+                  <option value="full" className="bg-[#1a1d24]">Full Fine-Tuning (Heavy)</option>
+                </select>
+              </div>
+            </>
           )}
         </div>
       </section>

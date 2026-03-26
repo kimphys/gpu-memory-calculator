@@ -40,6 +40,10 @@ interface SimulatorState {
   // Task & Params
   params: SimulationParams;
   setParams: (params: Partial<SimulationParams>) => void;
+  
+  // UI Interaction
+  editingField: string | null;
+  setEditingField: (field: string | null) => void;
 }
 
 export const useSimulatorStore = create<SimulatorState>((set, get) => ({
@@ -83,10 +87,18 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
 
   params: {
     quantizationBits: 16,
+    kvQuantizationBits: 16,
     batchSize: 1,
-    contextLength: 4096,
+    inputLength: 1024,
+    outputLength: 1024,
     isTraining: false,
     trainingMethod: 'lora',
+    numSamples: 1000,
+    numEpochs: 1,
+    gradientAccumulationSteps: 1,
   },
   setParams: (params) => set((state) => ({ params: { ...state.params, ...params } })),
+
+  editingField: null,
+  setEditingField: (editingField) => set({ editingField }),
 }));
