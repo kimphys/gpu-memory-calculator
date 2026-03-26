@@ -24,9 +24,28 @@ function createWindow() {
   });
 
   const isDev = !app.isPackaged;
-  
-  if (!isDev) {
-    // Register custom protocol for production
+  const startUrl = isDev 
+    ? 'http://localhost:3000' 
+    : 'app://index.html';
+
+  console.log('App starting...', { isDev, startUrl });
+  mainWindow.loadURL(startUrl);
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
+  if (isDev) {
+    // mainWindow.webContents.openDevTools();
+  }
+}
+
+function setupProtocol() {
+  if (app.isPackaged) {
     protocol.handle('app', async (request) => {
       try {
         let pathname = new URL(request.url).pathname;
@@ -54,28 +73,12 @@ function createWindow() {
       }
     });
   }
-
-  const startUrl = isDev 
-    ? 'http://localhost:3000' 
-    : 'app://index.html';
-
-  console.log('App starting...', { isDev, startUrl });
-  mainWindow.loadURL(startUrl);
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-  });
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
-
-  if (isDev) {
-    // mainWindow.webContents.openDevTools();
-  }
 }
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  setupProtocol();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
