@@ -10,17 +10,39 @@ export interface HFModelConfigRaw {
   intermediate_size?: number;
   num_local_experts?: number;
   num_experts_per_tok?: number;
+  max_position_embeddings?: number;
+  // Nested config for multimodal/hybrid models (Qwen 2.5/3.5)
+  text_config?: HFModelConfigRaw;
+  layer_types?: string[];
 }
 
 export function parseRawConfig(data: HFModelConfigRaw, modelId?: string): ModelConfig {
-    const hiddenSize = data.hidden_size || 4096;
-    const numLayers = data.num_hidden_layers || 32;
-    const numAttentionHeads = data.num_attention_heads || 32;
-    const numKeyValueHeads = data.num_key_value_heads || numAttentionHeads;
-    const intermediateSize = data.intermediate_size || (hiddenSize * 4); // Fallback for standard MLP
-    const vocabSize = data.vocab_size || 32000;
-    const numExperts = data.num_local_experts || 0;
-    const numActiveExperts = data.num_experts_per_tok || 0;
+    // Drill down into text_config if it's a multimodal wrapper (like Qwen 2-VL or 3.5)
+    const config = data.text_config ? { ...data, ...data.text_config } : data;
+
+    const hiddenSize = config.hidden_size || 4096;
+    const numLayers = config.num_hidden_layers || 32;
+    const numAttentionHeads = config.num_attention_heads || 32;
+    const numKeyValueHeads = config.num_key_value_heads || numAttentionHeads;
+    const intermediateSize = config.intermediate_size || (hiddenSize * 4); 
+    const vocabSize = config.vocab_size || 32000;
+    const numExperts = config.num_local_experts || 0;
+    const numActiveExperts = config.num_experts_per_tok || 0;
+    const maxContextLength = config.max_position_embeddings || 2048;
+
+    // Detect Hybrid Layers (e.g. Qwen 3.5)
+    const layerTypes = config.layer_types || [];
+    let numAttentionLayers = numLayers;
+    let numLinearLayers = 0;
+
+    if (layerTypes.length > 0) {
+      numAttentionLayers = layerTypes.filter(t => t.includes('full_attention')).length;
+      numLinearLayers = layerTypes.filter(t => t.includes('linear_attention') || t.includes('mamba')).length;
+      // Fallback: if they don't add up to numLayers, use the types array directly
+      if (numAttentionLayers + numLinearLayers === 0) {
+        numAttentionLayers = numLayers;
+      }
+    }
 
     let parametersInB = modelId ? extractParamsFromModelId(modelId) : null;
     let activeParametersInB: number | undefined = undefined;
@@ -32,10 +54,8 @@ export function parseRawConfig(data: HFModelConfigRaw, modelId?: string): ModelC
       
       let mlpParams = 0;
       if (numExperts > 0) {
-        // MoE: Experts * (W1 + W2 + W3) * hidden * intermediate
         mlpParams = numLayers * numExperts * 3 * hiddenSize * intermediateSize;
       } else {
-        // Dense: (W1 + W2 + W3) * hidden * intermediate
         mlpParams = numLayers * 3 * hiddenSize * intermediateSize;
       }
 
@@ -55,8 +75,11 @@ export function parseRawConfig(data: HFModelConfigRaw, modelId?: string): ModelC
       activeParametersInB,
       hiddenSize,
       numLayers,
+      numAttentionLayers,
+      numLinearLayers,
       numAttentionHeads,
       numKeyValueHeads,
+      maxContextLength,
     };
 }
 

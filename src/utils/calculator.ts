@@ -3,8 +3,11 @@ export interface ModelConfig {
   activeParametersInB?: number; // active parameters for MoE (optional)
   hiddenSize: number;
   numLayers: number;
+  numAttentionLayers?: number; // for hybrid models (e.g. Qwen 3.5)
+  numLinearLayers?: number;
   numAttentionHeads: number;
   numKeyValueHeads: number;
+  maxContextLength?: number;
 }
 
 export interface SimulationParams {
@@ -32,7 +35,7 @@ export interface TrainingMetrics {
 export function calculateWeightsMemory(parametersInB: number, quantizationBits: number): number {
   const bytesPerParam = quantizationBits / 8;
   const totalBytes = parametersInB * 1e9 * bytesPerParam;
-  return totalBytes / (1024 ** 3); // Convert to GiB
+  return totalBytes / 1e9; // Convert to GB (10^9)
 }
 
 /**
@@ -41,13 +44,23 @@ export function calculateWeightsMemory(parametersInB: number, quantizationBits: 
  */
 export function calculateKVCache(config: ModelConfig, params: SimulationParams): number {
   const headDim = config.hiddenSize / config.numAttentionHeads;
-  // KV Cache bit depth (Default 16, but supports FP8/INT8)
   const bits = params.kvQuantizationBits || 16;
   const bytesPerParam = bits / 8; 
 
-  const kvElements = 2 * params.batchSize * (params.inputLength + params.outputLength) * config.numKeyValueHeads * headDim * config.numLayers;
-  const totalBytes = kvElements * bytesPerParam;
-  return totalBytes / (1024 ** 3); // Convert to GiB
+  // Handle Hybrid Architectures (e.g. Qwen 3.5)
+  // If not specified, assume all layers are standard attention
+  const numAttnLayers = config.numAttentionLayers ?? config.numLayers;
+  const numLinearLayers = config.numLinearLayers ?? 0;
+
+  // 1. Standard Self-Attention KV Cache (O(SeqLen))
+  const kvElements = 2 * params.batchSize * (params.inputLength + params.outputLength) * config.numKeyValueHeads * headDim * numAttnLayers;
+  
+  // 2. Linear Attention / Mamba State (O(1) per token, O(Hidden) per request)
+  // Heuristic: Linear layers usually have a recurrent state approx 2x HiddenSize
+  const linearStateElements = params.batchSize * (config.hiddenSize * 2) * numLinearLayers;
+
+  const totalBytes = (kvElements + linearStateElements) * bytesPerParam;
+  return totalBytes / 1e9; // Convert to GB (10^9)
 }
 
 /**
@@ -59,12 +72,12 @@ export function calculateTrainingMemory(config: ModelConfig, method?: 'full' | '
   if (method === 'full') {
     // AdamW (12 bytes/param: m=4, v=4, backup_weights=4) + Gradients (FP32: 4 bytes/param) = 16 bytes/param
     const bytesPerParam = 16; 
-    return (params * bytesPerParam) / (1024 ** 3);
+    return (params * bytesPerParam) / 1e9;
   } else if (method === 'lora') {
     // LoRA overhead is tiny for weights, but we still have some gradients/states for adapters
     // Roughly 2 bytes/param of the baseline model is a safe enterprise upper bound for LoRA overhead
     const bytesPerParam = 2;
-    return (params * bytesPerParam) / (1024 ** 3);
+    return (params * bytesPerParam) / 1e9;
   }
   return 0;
 }
@@ -101,16 +114,11 @@ export function estimatePerformance(
   if (weightsMemGb === 0) return { totalThroughput: 0, speedPerUser: 0, ttftMs: 0, maxRps: 0 };
 
   // --- 1. Memory Bound Limits (Y-axis of Roofline) ---
-  // SYNC UNITS: gpu.bandwidthGbps is in GB/s (10^9). Convert to GiB/s (1024^3).
-  const bandwidthGiBps = (gpu.bandwidthGbps * 1e9) / (1024 ** 3);
-  const totalBandwidth = bandwidthGiBps * numGPUs;
-  // Realistic vLLM bandwidth utilization is max ~85%. Tensor parallel adds overhead.
-  const baseUtilization = 0.85; 
-  const tpEfficiency = numGPUs > 1 ? 0.8 : 1.0;
-  const effectiveBandwidth = totalBandwidth * baseUtilization * tpEfficiency;
+  // ALL UNITS Standardized to GB (10^9)
+  const effectiveBandwidthGBps = gpu.bandwidthGbps * numGPUs * 0.85 * (numGPUs > 1 ? 0.8 : 1.0);
   
   // Memory Bound Time: Data to read per step = Weights (read once) + KV Cache (for all users)
-  const timeMemoryBoundSec = (weightsMemGb + kvCacheGb) / effectiveBandwidth;
+  const timeMemoryBoundSec = (weightsMemGb + kvCacheGb) / effectiveBandwidthGBps;
   
   // --- 2. Compute Bound Limits (X-axis Slope of Roofline) ---
   // To generate a token, the model does MACs for every active parameter.
@@ -200,7 +208,7 @@ export function calculateTrainingMetrics(
   // We use a factor of 2 to account for intermediate activations (MLP expansion, etc.)
   const seqLen = params.inputLength + params.outputLength;
   const activationElements = 2 * (params.batchSize || 1) * seqLen * config.hiddenSize * config.numLayers;
-  const activationMemoryGb = (activationElements * 2) / (1024 ** 3);
+  const activationMemoryGb = (activationElements * 2) / 1e9;
 
   return {
     totalTokens,

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { ModelConfig, SimulationParams } from '../utils/calculator';
-import { MODEL_PRESETS } from '../data/presets';
+import { MODEL_PRESETS, GPUS } from '../data/presets';
 
 type InputMode = 'PRESET' | 'HF_URL' | 'CUSTOM';
 
@@ -36,7 +36,6 @@ interface SimulatorState {
   setGpuId: (id: string) => void;
   gpuCount: number;
   setGpuCount: (count: number) => void;
-
   // Task & Params
   params: SimulationParams;
   setParams: (params: Partial<SimulationParams>) => void;
@@ -52,7 +51,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
   inputMode: 'PRESET',
   setInputMode: (mode) => set({ inputMode: mode }),
 
-  presetModelId: 'llama-3-8b',
+  presetModelId: 'ministral-8b',
   setPresetModelId: (presetModelId) => set({ presetModelId }),
 
   hfUrl: '',

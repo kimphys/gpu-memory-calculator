@@ -80,6 +80,12 @@ export default function InfoModal() {
                 <p className="font-bold text-white mb-2 flex items-center gap-2">
                   <span className="text-primary-400">01.</span> Total Throughput (Tokens/sec)
                 </p>
+                <ul className="list-none p-0 m-0 mb-2"> {/* Added ul to contain the li */}
+                  <li className="flex gap-2 text-primary-400">
+                    <span>•</span>
+                    <span><strong>단위 기준</strong>: 본 시뮬레이터는 직관성을 위해 모든 단위에 10진수(1GB = 10⁹ bytes)를 사용합니다.</span>
+                  </li>
+                </ul>
                 <p className="leading-relaxed">
                   시스템이 출력하는 초당 전체 토큰 수입니다. <strong>Roofline Model</strong>을 기반으로 GPU의 메모리 대역폭(Memory-bound)과 연산량(Compute-bound) 중 더 심각한 병목 지점을 자동으로 찾아 계산합니다. 
                   <span className="text-gray-400 block mt-1 text-[12px]">※ 여기에 기업용 운영 환경을 고려한 0.8배의 보정 계수가 적용되어 있습니다.</span>

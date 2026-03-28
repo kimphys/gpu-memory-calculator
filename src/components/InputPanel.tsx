@@ -3,7 +3,7 @@
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { MODEL_PRESETS, GPUS, QUANTIZATION_OPTIONS } from '../data/presets';
 import { fetchHFModelConfig } from '../utils/huggingface';
-import { Server, Database, Activity, UploadCloud, CheckCircle } from 'lucide-react';
+import { Server, Database, Activity, UploadCloud, CheckCircle, HelpCircle } from 'lucide-react';
 
 export default function InputPanel() {
   const store = useSimulatorStore();
@@ -48,19 +48,27 @@ export default function InputPanel() {
 
         <div className="p-4 bg-surface-50 rounded-xl border border-white/5 space-y-4">
           {store.inputMode === 'PRESET' && (
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-400">Select Model</label>
-              <select 
-                title="Select Preset Model"
-                className="glass-input" 
-                value={store.presetModelId} 
-                onChange={(e) => store.setPresetModelId(e.target.value)}
-              >
-                {Object.entries(MODEL_PRESETS).map(([id, model]) => (
-                  <option key={id} value={id} className="bg-[#1a1d24]">{model.name}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm text-gray-400">Select Model</label>
+                <select 
+                  title="Select Preset Model"
+                  className="glass-input" 
+                  value={store.presetModelId} 
+                  onChange={(e) => store.setPresetModelId(e.target.value)}
+                >
+                  {Object.entries(MODEL_PRESETS).map(([id, model]) => (
+                    <option key={id} value={id} className="bg-[#1a1d24]">{model.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-2 px-2 py-1.5 bg-primary-500/5 rounded-lg border border-primary-500/10">
+                <p className="text-[10px] text-primary-400 flex items-center gap-1.5">
+                  <Activity className="w-3 h-3" />
+                  Max Context: <span className="font-bold">{MODEL_PRESETS[store.presetModelId]?.maxContextLength?.toLocaleString() || 'N/A'} tokens</span>
+                </p>
+              </div>
+            </>
           )}
 
           {store.inputMode === 'HF_URL' && (
@@ -129,6 +137,14 @@ export default function InputPanel() {
                   <div className="font-bold flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Model Loaded Successfully</div>
                   <div className="text-gray-400 text-[10px] mt-0.5">
                     {store.hfConfig.parametersInB}B Params • {store.hfConfig.hiddenSize} Hidden • {store.hfConfig.numLayers} Layers
+                    {store.hfConfig.numLinearLayers !== undefined && store.hfConfig.numLinearLayers > 0 && (
+                      <span className="text-accent-400"> ({store.hfConfig.numAttentionLayers} Self / {store.hfConfig.numLinearLayers} Linear)</span>
+                    )}
+                    {store.hfConfig.maxContextLength && (
+                      <div className="mt-1 text-primary-400 font-bold">
+                        Max Context: {store.hfConfig.maxContextLength.toLocaleString()} tokens
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -262,6 +278,11 @@ export default function InputPanel() {
                     </div>
                   )}
                 </div>
+              </div>
+              <div className="col-span-2 mt-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
+                <p className="text-[10px] text-gray-500 leading-relaxed italic">
+                  * Custom 모드에서는 최대 컨텍스트 길이를 자동으로 알 수 없습니다. 해당 모델의 config.json이나 공식 기술 문서를 참고하여 슬라이더 범위를 조절해 주세요.
+                </p>
               </div>
             </div>
           )}

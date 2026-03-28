@@ -3,7 +3,7 @@
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { calculateWeightsMemory, calculateKVCache, calculateTrainingMemory, estimatePerformance, calculateTrainingMetrics, PerformanceMetrics, CUDA_OVERHEAD_GB } from '../utils/calculator';
 import { GPUS } from '../data/presets';
-import { Cpu, Zap, Users, Activity, CheckCircle, Database, AlertTriangle } from 'lucide-react';
+import { Cpu, Zap, Users, Activity, CheckCircle, Database, AlertTriangle, Server } from 'lucide-react';
 
 export default function ResultsDashboard() {
   const store = useSimulatorStore();
@@ -63,6 +63,8 @@ export default function ResultsDashboard() {
         activeModel, store.params, store.gpuCount
       );
   }
+
+  // Status computation
 
   // Status computation
   const isOom = totalUsedGb > totalVramLimit;
@@ -280,6 +282,32 @@ export default function ResultsDashboard() {
               ).toFixed(1)}%
             </span>
           </div>
+        </div>
+      )}
+
+      {/* AWS Instance Reference */}
+
+      {/* AWS Instance Reference */}
+      {!isOom && (selectedGpu as any).awsInstance && (
+        <div className="mt-2 p-4 bg-surface-100/50 rounded-2xl border border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-500/10 rounded-lg">
+              <Server className="w-5 h-5 text-orange-500" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-gray-300 uppercase letter tracking-tighter">AWS Infrastructure Reference</h4>
+              <p className="text-[11px] text-gray-500">{(selectedGpu as any).awsInstance} 인스턴스 활용 권장</p>
+            </div>
+          </div>
+          
+          <a 
+            href={(selectedGpu as any).awsUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-[10px] bg-white/5 hover:bg-white/10 text-gray-300 px-3 py-1.5 rounded-lg border border-white/10 transition-all flex items-center gap-2"
+          >
+            AWS 공식 문서 ({(selectedGpu as any).awsInstance.split(' ')[0]}) 보기
+          </a>
         </div>
       )}
 
