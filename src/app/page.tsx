@@ -48,12 +48,12 @@ export default function Home() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left: Input Configurations */}
-          <div className="col-span-1 lg:col-span-5">
+          <div className="col-span-1 lg:col-span-4">
             <InputPanel />
           </div>
 
           {/* Right: Results Dashboard */}
-          <div className="col-span-1 lg:col-span-7">
+          <div className="col-span-1 lg:col-span-8">
             <ResultsDashboard />
           </div>
         </div>

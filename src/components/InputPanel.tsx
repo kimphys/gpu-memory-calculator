@@ -3,22 +3,24 @@
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { MODEL_PRESETS, GPUS, QUANTIZATION_OPTIONS } from '../data/presets';
 import { fetchHFModelConfig } from '../utils/huggingface';
-import { Server, Database, Activity, UploadCloud, CheckCircle, HelpCircle, AlertTriangle } from 'lucide-react';
-
+import { Server, Database, Activity, UploadCloud, CheckCircle, Split, Copy, AlertTriangle } from 'lucide-react';
 
 export default function InputPanel() {
   const store = useSimulatorStore();
+  const data = store.scenarios[store.activeScenario];
+  
   const config = store.getActiveModelConfig();
   const maxContext = config?.maxContextLength || 0;
-  const totalTokens = store.params.inputLength + store.params.outputLength;
+  const totalTokens = data.params.inputLength + data.params.outputLength;
   const isLimitExceeded = maxContext > 0 && totalTokens > maxContext;
+
   const handleHfFetch = async () => {
-    if (!store.hfUrl) return;
+    if (!data.hfUrl) return;
     store.setIsFetchingHf(true);
     store.setHfError(null);
-    const config = await fetchHFModelConfig(store.hfUrl);
-    if (config) {
-      store.setHfConfig(config);
+    const fetchedConfig = await fetchHFModelConfig(data.hfUrl);
+    if (fetchedConfig) {
+      store.setHfConfig(fetchedConfig);
     } else {
       store.setHfError('Failed to fetch from HuggingFace. Check the URL/ID.');
     }
@@ -26,8 +28,51 @@ export default function InputPanel() {
   };
 
   return (
-    <div className="glass-panel p-6 md:p-8 flex flex-col gap-8 w-full h-full">
+    <div className="glass-panel p-6 md:p-8 flex flex-col gap-6 w-full h-full overflow-y-auto custom-scrollbar">
       
+      {/* Compare Mode & Scenario Tabs */}
+      <div className="flex flex-col gap-4 pb-4 border-b border-white/5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Split className="w-4 h-4 text-primary-400" />
+            <span className="text-sm font-bold text-white uppercase tracking-wider">Compare Mode</span>
+          </div>
+          <button 
+            onClick={() => store.setIsCompareMode(!store.isCompareMode)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${store.isCompareMode ? 'bg-primary-600' : 'bg-surface-200'}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${store.isCompareMode ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+
+        {store.isCompareMode && (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex bg-surface-100 p-1 rounded-xl items-center">
+              {(['A', 'B'] as const).map((id) => (
+                <button
+                  key={id}
+                  onClick={() => store.setActiveScenario(id)}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    store.activeScenario === id 
+                      ? 'bg-primary-600 text-white shadow-lg' 
+                      : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  Scenario {id}
+                </button>
+              ))}
+            </div>
+            <button 
+              title={`Copy Scenario ${store.activeScenario} to ${store.activeScenario === 'A' ? 'B' : 'A'}`}
+              onClick={() => store.copyScenario(store.activeScenario, store.activeScenario === 'A' ? 'B' : 'A')}
+              className="p-2.5 bg-surface-100 hover:bg-surface-200 text-gray-400 hover:text-white rounded-xl transition-all border border-white/5"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* 1. Model Selection */}
       <section className="flex flex-col gap-4">
         <h2 className="text-xl font-semibold flex items-center gap-2 text-white">
@@ -40,7 +85,7 @@ export default function InputPanel() {
               key={m}
               onClick={() => store.setInputMode(m as any)}
               className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                store.inputMode === m 
+                data.inputMode === m 
                   ? 'bg-primary-600 text-white shadow-md' 
                   : 'text-gray-400 hover:text-white'
               }`}
@@ -51,14 +96,14 @@ export default function InputPanel() {
         </div>
 
         <div className="p-4 bg-surface-50 rounded-xl border border-white/5 space-y-4">
-          {store.inputMode === 'PRESET' && (
+          {data.inputMode === 'PRESET' && (
             <>
               <div className="flex flex-col gap-2">
                 <label className="text-sm text-gray-400">Select Model</label>
                 <select 
                   title="Select Preset Model"
                   className="glass-input" 
-                  value={store.presetModelId} 
+                  value={data.presetModelId} 
                   onChange={(e) => store.setPresetModelId(e.target.value)}
                 >
                   {Object.entries(MODEL_PRESETS).map(([id, model]) => (
@@ -69,13 +114,13 @@ export default function InputPanel() {
               <div className="mt-2 px-2 py-1.5 bg-primary-500/5 rounded-lg border border-primary-500/10">
                 <p className="text-[10px] text-primary-400 flex items-center gap-1.5">
                   <Activity className="w-3 h-3" />
-                  Max Context: <span className="font-bold">{MODEL_PRESETS[store.presetModelId]?.maxContextLength?.toLocaleString() || 'N/A'} tokens</span>
+                  Max Context: <span className="font-bold">{MODEL_PRESETS[data.presetModelId]?.maxContextLength?.toLocaleString() || 'N/A'} tokens</span>
                 </p>
               </div>
             </>
           )}
 
-          {store.inputMode === 'HF_URL' && (
+          {data.inputMode === 'HF_URL' && (
             <div className="flex flex-col gap-2">
               <label className="text-sm text-gray-400">HuggingFace Model ID or URL</label>
               <div className="flex flex-col gap-3">
@@ -83,15 +128,15 @@ export default function InputPanel() {
                   type="text"
                   placeholder="e.g. meta-llama/Meta-Llama-3-8B"
                   className="glass-input"
-                  value={store.hfUrl}
+                  value={data.hfUrl}
                   onChange={(e) => store.setHfUrl(e.target.value)}
                 />
                 <button 
                   onClick={handleHfFetch}
-                  disabled={store.isFetchingHf || !store.hfUrl}
+                  disabled={data.isFetchingHf || !data.hfUrl}
                   className="glass-button w-full"
                 >
-                  {store.isFetchingHf ? 'Parsing config...' : <><UploadCloud className="w-4 h-4" /> Fetch Config</>}
+                  {data.isFetchingHf ? 'Parsing config...' : <><UploadCloud className="w-4 h-4" /> Fetch Config</>}
                 </button>
               </div>
               
@@ -122,8 +167,8 @@ export default function InputPanel() {
                         try {
                           const json = JSON.parse(event.target?.result as string);
                           const { parseRawConfig } = require('../utils/huggingface');
-                          const config = parseRawConfig(json);
-                          store.setHfConfig(config);
+                          const fetchedConfig = parseRawConfig(json);
+                          store.setHfConfig(fetchedConfig);
                           store.setHfError(null);
                         } catch (err) {
                           store.setHfError('Invalid config.json file.');
@@ -135,18 +180,18 @@ export default function InputPanel() {
                 </label>
               </div>
 
-              {store.hfError && <p className="text-red-400 text-sm mt-3 bg-red-500/10 p-2 rounded border border-red-500/20">{store.hfError}</p>}
-              {store.hfConfig && (
+              {data.hfError && <p className="text-red-400 text-sm mt-3 bg-red-500/10 p-2 rounded border border-red-500/20">{data.hfError}</p>}
+              {data.hfConfig && (
                 <div className="mt-3 text-xs text-green-400 bg-green-500/10 p-3 rounded border border-green-500/20 flex flex-col gap-1">
                   <div className="font-bold flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Model Loaded Successfully</div>
                   <div className="text-gray-400 text-[10px] mt-0.5">
-                    {store.hfConfig.parametersInB}B Params • {store.hfConfig.hiddenSize} Hidden • {store.hfConfig.numLayers} Layers
-                    {store.hfConfig.numLinearLayers !== undefined && store.hfConfig.numLinearLayers > 0 && (
-                      <span className="text-accent-400"> ({store.hfConfig.numAttentionLayers} Self / {store.hfConfig.numLinearLayers} Linear)</span>
+                    {data.hfConfig.parametersInB}B Params • {data.hfConfig.hiddenSize} Hidden • {data.hfConfig.numLayers} Layers
+                    {data.hfConfig.numLinearLayers !== undefined && data.hfConfig.numLinearLayers > 0 && (
+                      <span className="text-accent-400"> ({data.hfConfig.numAttentionLayers} Self / {data.hfConfig.numLinearLayers} Linear)</span>
                     )}
-                    {store.hfConfig.maxContextLength && (
+                    {data.hfConfig.maxContextLength && (
                       <div className="mt-1 text-primary-400 font-bold">
-                        Max Context: {store.hfConfig.maxContextLength.toLocaleString()} tokens
+                        Max Context: {data.hfConfig.maxContextLength.toLocaleString()} tokens
                       </div>
                     )}
                   </div>
@@ -155,7 +200,7 @@ export default function InputPanel() {
             </div>
           )}
 
-          {store.inputMode === 'CUSTOM' && (
+          {data.inputMode === 'CUSTOM' && (
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400">Total Params (B)</label>
@@ -164,7 +209,7 @@ export default function InputPanel() {
                     <input 
                       autoFocus type="text" inputMode="numeric"
                       className="glass-input !py-1 w-full text-right"
-                      value={store.customConfig.parametersInB}
+                      value={data.customConfig.parametersInB}
                       onChange={(e) => store.setCustomConfig({ parametersInB: Number(e.target.value.replace(/\D/g, '')) })}
                       onBlur={() => store.setEditingField(null)}
                       onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
@@ -172,7 +217,7 @@ export default function InputPanel() {
                   ) : (
                     <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
                       <span className="text-gray-500 text-[10px] uppercase">Billion</span>
-                      <span className="text-white font-mono">{store.customConfig.parametersInB}</span>
+                      <span className="text-white font-mono">{data.customConfig.parametersInB}</span>
                     </div>
                   )}
                 </div>
@@ -186,7 +231,7 @@ export default function InputPanel() {
                       autoFocus type="text" inputMode="numeric"
                       className="glass-input !py-1 w-full text-right"
                       placeholder="Dense면 비워두세요"
-                      value={store.customConfig.activeParametersInB || ''}
+                      value={data.customConfig.activeParametersInB || ''}
                       onChange={(e) => store.setCustomConfig({ activeParametersInB: e.target.value ? Number(e.target.value.replace(/\D/g, '')) : undefined })}
                       onBlur={() => store.setEditingField(null)}
                       onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
@@ -194,7 +239,7 @@ export default function InputPanel() {
                   ) : (
                     <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
                       <span className="text-accent-500/50 text-[10px] uppercase">Active</span>
-                      <span className="text-accent-400 font-mono italic">{store.customConfig.activeParametersInB || 'Dense'}</span>
+                      <span className="text-accent-400 font-mono italic">{data.customConfig.activeParametersInB || 'Dense'}</span>
                     </div>
                   )}
                 </div>
@@ -207,7 +252,7 @@ export default function InputPanel() {
                     <input 
                       autoFocus type="text" inputMode="numeric"
                       className="glass-input !py-1 w-full text-right"
-                      value={store.customConfig.hiddenSize}
+                      value={data.customConfig.hiddenSize}
                       onChange={(e) => store.setCustomConfig({ hiddenSize: Number(e.target.value.replace(/\D/g, '')) })}
                       onBlur={() => store.setEditingField(null)}
                       onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
@@ -215,7 +260,7 @@ export default function InputPanel() {
                   ) : (
                     <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
                        <span className="text-gray-500 text-[10px] uppercase">Dim</span>
-                       <span className="text-white font-mono">{store.customConfig.hiddenSize}</span>
+                       <span className="text-white font-mono">{data.customConfig.hiddenSize}</span>
                     </div>
                   )}
                 </div>
@@ -228,7 +273,7 @@ export default function InputPanel() {
                     <input 
                       autoFocus type="text" inputMode="numeric"
                       className="glass-input !py-1 w-full text-right"
-                      value={store.customConfig.numLayers}
+                      value={data.customConfig.numLayers}
                       onChange={(e) => store.setCustomConfig({ numLayers: Number(e.target.value.replace(/\D/g, '')) })}
                       onBlur={() => store.setEditingField(null)}
                       onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
@@ -236,7 +281,7 @@ export default function InputPanel() {
                   ) : (
                     <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
                       <span className="text-gray-500 text-[10px] uppercase">Blocks</span>
-                      <span className="text-white font-mono">{store.customConfig.numLayers}</span>
+                      <span className="text-white font-mono">{data.customConfig.numLayers}</span>
                     </div>
                   )}
                 </div>
@@ -249,7 +294,7 @@ export default function InputPanel() {
                     <input 
                       autoFocus type="text" inputMode="numeric"
                       className="glass-input !py-1 w-full text-right"
-                      value={store.customConfig.numAttentionHeads}
+                      value={data.customConfig.numAttentionHeads}
                       onChange={(e) => store.setCustomConfig({ numAttentionHeads: Number(e.target.value.replace(/\D/g, '')) })}
                       onBlur={() => store.setEditingField(null)}
                       onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
@@ -257,7 +302,7 @@ export default function InputPanel() {
                   ) : (
                     <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
                       <span className="text-gray-500 text-[10px] uppercase">Query</span>
-                      <span className="text-white font-mono">{store.customConfig.numAttentionHeads}</span>
+                      <span className="text-white font-mono">{data.customConfig.numAttentionHeads}</span>
                     </div>
                   )}
                 </div>
@@ -270,7 +315,7 @@ export default function InputPanel() {
                     <input 
                       autoFocus type="text" inputMode="numeric"
                       className="glass-input !py-1 w-full text-right"
-                      value={store.customConfig.numKeyValueHeads}
+                      value={data.customConfig.numKeyValueHeads}
                       onChange={(e) => store.setCustomConfig({ numKeyValueHeads: Number(e.target.value.replace(/\D/g, '')) })}
                       onBlur={() => store.setEditingField(null)}
                       onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
@@ -278,7 +323,7 @@ export default function InputPanel() {
                   ) : (
                     <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
                       <span className="text-gray-500 text-[10px] uppercase">GQA/MQA</span>
-                      <span className="text-white font-mono">{store.customConfig.numKeyValueHeads}</span>
+                      <span className="text-white font-mono">{data.customConfig.numKeyValueHeads}</span>
                     </div>
                   )}
                 </div>
@@ -291,7 +336,7 @@ export default function InputPanel() {
                     <input 
                       autoFocus type="text" inputMode="numeric"
                       className="glass-input !py-1 w-full text-right"
-                      value={store.customConfig.maxContextLength || ''}
+                      value={data.customConfig.maxContextLength || ''}
                       onChange={(e) => store.setCustomConfig({ maxContextLength: Number(e.target.value.replace(/\D/g, '')) })}
                       onBlur={() => store.setEditingField(null)}
                       onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
@@ -299,7 +344,7 @@ export default function InputPanel() {
                   ) : (
                     <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
                       <span className="text-primary-500/50 text-[10px] uppercase">Tokens</span>
-                      <span className="text-primary-400 font-mono">{store.customConfig.maxContextLength?.toLocaleString() || 'N/A'}</span>
+                      <span className="text-primary-400 font-mono">{data.customConfig.maxContextLength?.toLocaleString() || 'N/A'}</span>
                     </div>
                   )}
                 </div>
@@ -316,27 +361,27 @@ export default function InputPanel() {
         
         <div className="flex flex-col gap-2">
           <label className="text-sm text-gray-400">Weight Precision / Quantization</label>
-            <select 
-                title="Weights Quantization" className="glass-input"
-                value={store.params.quantizationBits}
-                onChange={(e) => store.setParams({ quantizationBits: Number(e.target.value) })}
-              >
-                {QUANTIZATION_OPTIONS.map((q) => (
-                  <option key={q.id} value={q.bits} className="bg-[#1a1d24]">{q.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-400">KV Quantization</label>
-              <select 
-                title="KV Cache Quantization" className="glass-input"
-                value={store.params.kvQuantizationBits}
-                onChange={(e) => store.setParams({ kvQuantizationBits: Number(e.target.value) })}
-              >
-                <option value={16} className="bg-[#1a1d24]">16-bit (Default)</option>
-                <option value={8} className="bg-[#1a1d24]">8-bit (FP8/INT8)</option>
-              </select>
-            </div>
+          <select 
+            title="Weights Quantization" className="glass-input"
+            value={data.params.quantizationBits}
+            onChange={(e) => store.setParams({ quantizationBits: Number(e.target.value) })}
+          >
+            {QUANTIZATION_OPTIONS.map((q) => (
+              <option key={q.id} value={q.bits} className="bg-[#1a1d24]">{q.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm text-gray-400">KV Quantization</label>
+          <select 
+            title="KV Cache Quantization" className="glass-input"
+            value={data.params.kvQuantizationBits}
+            onChange={(e) => store.setParams({ kvQuantizationBits: Number(e.target.value) })}
+          >
+            <option value={16} className="bg-[#1a1d24]">16-bit (Default)</option>
+            <option value={8} className="bg-[#1a1d24]">8-bit (FP8/INT8)</option>
+          </select>
+        </div>
       </section>
 
       {/* 2. Hardware Selection */}
@@ -350,7 +395,7 @@ export default function InputPanel() {
             <label className="text-sm text-gray-400">GPU Type</label>
             <select 
               title="GPU" className="glass-input"
-              value={store.gpuId}
+              value={data.gpuId}
               onChange={(e) => store.setGpuId(e.target.value)}
             >
               {GPUS.map((g) => (
@@ -363,7 +408,7 @@ export default function InputPanel() {
             <input 
               type="number" title="GPU Count" min="1" max="128"
               className="glass-input"
-              value={store.gpuCount}
+              value={data.gpuCount}
               onChange={(e) => store.setGpuCount(Number(e.target.value))}
             />
           </div>
@@ -380,7 +425,7 @@ export default function InputPanel() {
           <button
             onClick={() => store.setParams({ isTraining: false })}
             className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${
-              !store.params.isTraining ? 'bg-primary-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
+              !data.params.isTraining ? 'bg-primary-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
             }`}
           >
             Inference
@@ -388,7 +433,7 @@ export default function InputPanel() {
           <button
             onClick={() => store.setParams({ isTraining: true })}
             className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${
-              store.params.isTraining ? 'bg-accent-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
+              data.params.isTraining ? 'bg-accent-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
             }`}
           >
             Training
@@ -406,7 +451,7 @@ export default function InputPanel() {
                     type="text"
                     inputMode="numeric"
                     className="w-24 bg-primary-600/20 border border-primary-500/50 rounded px-2 py-0.5 text-right text-primary-400 font-mono font-bold text-xs outline-none"
-                    value={store.params.inputLength}
+                    value={data.params.inputLength}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
                       store.setParams({ inputLength: val ? Number(val) : 0 });
@@ -416,7 +461,7 @@ export default function InputPanel() {
                   />
                 ) : (
                   <span className={`${isLimitExceeded ? 'text-red-500' : 'text-primary-400'} font-mono font-bold cursor-help border-b border-dotted ${isLimitExceeded ? 'border-red-500/50' : 'border-primary-500/50'}`} title="Double-click to type">
-                    {store.params.inputLength.toLocaleString()}
+                    {data.params.inputLength.toLocaleString()}
                   </span>
                 )}
               </div>
@@ -424,7 +469,7 @@ export default function InputPanel() {
             <input 
               title="Input Prompt Length" type="range" 
               min="128" max={maxContext || 131072} step="128"
-              value={store.params.inputLength}
+              value={data.params.inputLength}
               onChange={(e) => store.setParams({ inputLength: Number(e.target.value) })}
               className="w-full accent-primary-500"
             />
@@ -436,7 +481,7 @@ export default function InputPanel() {
               <div className="flex flex-col gap-0.5">
                 <p className="text-[11px] font-bold text-red-400">Token Limit Exceeded</p>
                 <p className="text-[10px] text-red-400/80 leading-tight">
-                  Sum of input ({store.params.inputLength.toLocaleString()}) and output ({store.params.outputLength.toLocaleString()}) tokens 
+                  Sum of input ({data.params.inputLength.toLocaleString()}) and output ({data.params.outputLength.toLocaleString()}) tokens 
                   is <span className="font-bold underline">{totalTokens.toLocaleString()}</span>, which exceeds the model's 
                   Max Context ({maxContext.toLocaleString()}).
                 </p>
@@ -454,7 +499,7 @@ export default function InputPanel() {
                     type="text"
                     inputMode="numeric"
                     className="w-24 bg-accent-600/20 border border-accent-500/50 rounded px-2 py-0.5 text-right text-accent-400 font-mono font-bold text-xs outline-none"
-                    value={store.params.outputLength}
+                    value={data.params.outputLength}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
                       store.setParams({ outputLength: val ? Number(val) : 0 });
@@ -464,7 +509,7 @@ export default function InputPanel() {
                   />
                 ) : (
                   <span className={`${isLimitExceeded ? 'text-red-500' : 'text-accent-400'} font-mono font-bold cursor-help border-b border-dotted ${isLimitExceeded ? 'border-red-500/50' : 'border-accent-500/50'}`} title="Double-click to type">
-                    {store.params.outputLength.toLocaleString()}
+                    {data.params.outputLength.toLocaleString()}
                   </span>
                 )}
               </div>
@@ -472,7 +517,7 @@ export default function InputPanel() {
             <input 
               title="Max Output Length" type="range" 
               min="128" max={maxContext || 131072} step="128"
-              value={store.params.outputLength}
+              value={data.params.outputLength}
               onChange={(e) => store.setParams({ outputLength: Number(e.target.value) })}
               className="w-full accent-accent-500"
             />
@@ -488,7 +533,7 @@ export default function InputPanel() {
                     type="text"
                     inputMode="numeric"
                     className="w-16 bg-white/10 border border-white/20 rounded px-2 py-0.5 text-right text-white font-mono font-bold text-xs outline-none"
-                    value={store.params.batchSize}
+                    value={data.params.batchSize}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
                       store.setParams({ batchSize: val ? Number(val) : 0 });
@@ -498,7 +543,7 @@ export default function InputPanel() {
                   />
                 ) : (
                   <span className="text-white font-mono font-bold cursor-help border-b border-dotted border-white/30" title="Double-click to type">
-                    {store.params.batchSize}
+                    {data.params.batchSize}
                   </span>
                 )}
               </div>
@@ -506,13 +551,13 @@ export default function InputPanel() {
             <input 
               title="Batch Size" type="range" 
               min="1" max="256" step="1"
-              value={store.params.batchSize}
+              value={data.params.batchSize}
               onChange={(e) => store.setParams({ batchSize: Number(e.target.value) })}
               className="w-full accent-primary-500"
             />
           </div>
           
-          {store.params.isTraining && (
+          {data.params.isTraining && (
             <>
               <div className="flex flex-col gap-2 pt-4 border-t border-white/10">
                 <div className="flex justify-between items-center text-sm">
@@ -522,21 +567,21 @@ export default function InputPanel() {
                       <input 
                         autoFocus type="text" inputMode="numeric"
                         className="w-24 bg-accent-600/20 border border-accent-500/50 rounded px-2 py-0.5 text-right text-accent-400 font-mono font-bold text-xs outline-none"
-                        value={store.params.numSamples}
+                        value={data.params.numSamples}
                         onChange={(e) => store.setParams({ numSamples: Number(e.target.value.replace(/\D/g, '')) })}
                         onBlur={() => store.setEditingField(null)}
                         onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
                       />
                     ) : (
                       <span className="text-accent-400 font-mono font-bold cursor-help border-b border-dotted border-accent-500/50">
-                        {store.params.numSamples?.toLocaleString()}
+                        {data.params.numSamples?.toLocaleString()}
                       </span>
                     )}
                   </div>
                 </div>
                 <input 
                   type="range" min="100" max="1000000" step="100"
-                  value={store.params.numSamples}
+                  value={data.params.numSamples}
                   onChange={(e) => store.setParams({ numSamples: Number(e.target.value) })}
                   className="w-full accent-accent-500"
                 />
@@ -550,33 +595,31 @@ export default function InputPanel() {
                       <input 
                         autoFocus type="text" inputMode="numeric"
                         className="w-16 bg-accent-600/20 border border-accent-500/50 rounded px-2 py-0.5 text-right text-accent-400 font-mono font-bold text-xs outline-none"
-                        value={store.params.numEpochs}
+                        value={data.params.numEpochs}
                         onChange={(e) => store.setParams({ numEpochs: Number(e.target.value.replace(/\D/g, '')) })}
                         onBlur={() => store.setEditingField(null)}
                         onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
                       />
                     ) : (
                       <span className="text-accent-400 font-mono font-bold cursor-help border-b border-dotted border-accent-500/50">
-                        {store.params.numEpochs}
+                        {data.params.numEpochs}
                       </span>
                     )}
                   </div>
                 </div>
                 <input 
                   type="range" min="1" max="100" step="1"
-                  value={store.params.numEpochs}
+                  value={data.params.numEpochs}
                   onChange={(e) => store.setParams({ numEpochs: Number(e.target.value) })}
                   className="w-full accent-accent-500"
                 />
               </div>
 
-
-
               <div className="flex flex-col gap-2 pt-2">
                 <label className="text-sm text-gray-400">Training Method</label>
                 <select 
                   title="Training Method" className="glass-input"
-                  value={store.params.trainingMethod}
+                  value={data.params.trainingMethod}
                   onChange={(e) => store.setParams({ trainingMethod: e.target.value as any })}
                 >
                   <option value="lora" className="bg-[#1a1d24]">PEFT / LoRA (Efficient)</option>

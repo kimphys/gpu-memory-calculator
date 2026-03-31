@@ -4,65 +4,63 @@ import { MODEL_PRESETS, GPUS } from '../data/presets';
 
 type InputMode = 'PRESET' | 'HF_URL' | 'CUSTOM';
 
-interface SimulatorState {
+export interface ScenarioData {
+  inputMode: InputMode;
+  presetModelId: string;
+  hfUrl: string;
+  hfConfig: ModelConfig | null;
+  isFetchingHf: boolean;
+  hfError: string | null;
+  customConfig: ModelConfig;
+  gpuId: string;
+  gpuCount: number;
+  params: SimulationParams;
+}
+
+export interface SimulatorState {
   isInfoOpen: boolean;
   setIsInfoOpen: (open: boolean) => void;
-  inputMode: InputMode;
+  
+  // Compare Mode State
+  isCompareMode: boolean;
+  setIsCompareMode: (enabled: boolean) => void;
+  activeScenario: 'A' | 'B';
+  setActiveScenario: (id: 'A' | 'B') => void;
+  
+  scenarios: {
+    A: ScenarioData;
+    B: ScenarioData;
+  };
+
+  // Setters (Target active scenario)
   setInputMode: (mode: InputMode) => void;
-
-  // Preset Selection
-  presetModelId: string;
   setPresetModelId: (id: string) => void;
-  
-  // HF URL Logic
-  hfUrl: string;
   setHfUrl: (url: string) => void;
-  hfConfig: ModelConfig | null;
   setHfConfig: (config: ModelConfig | null) => void;
-  isFetchingHf: boolean;
   setIsFetchingHf: (fetching: boolean) => void;
-  hfError: string | null;
   setHfError: (error: string | null) => void;
-  
-  // Custom Config
-  customConfig: ModelConfig;
   setCustomConfig: (config: Partial<ModelConfig>) => void;
-
-  // Active Model Getter
-  getActiveModelConfig: () => ModelConfig | null;
-
-  // Hardware
-  gpuId: string;
   setGpuId: (id: string) => void;
-  gpuCount: number;
   setGpuCount: (count: number) => void;
-  // Task & Params
-  params: SimulationParams;
   setParams: (params: Partial<SimulationParams>) => void;
   
+  copyScenario: (from: 'A' | 'B', to: 'A' | 'B') => void;
+
+  // Active Model Getter
+  getActiveModelConfig: (scenarioId?: 'A' | 'B') => ModelConfig | null;
+
   // UI Interaction
   editingField: string | null;
   setEditingField: (field: string | null) => void;
 }
 
-export const useSimulatorStore = create<SimulatorState>((set, get) => ({
-  isInfoOpen: false,
-  setIsInfoOpen: (isInfoOpen) => set({ isInfoOpen }),
+const initialScenarioData: ScenarioData = {
   inputMode: 'PRESET',
-  setInputMode: (mode) => set({ inputMode: mode }),
-
   presetModelId: 'ministral-8b',
-  setPresetModelId: (presetModelId) => set({ presetModelId }),
-
   hfUrl: '',
-  setHfUrl: (hfUrl) => set({ hfUrl }),
   hfConfig: null,
-  setHfConfig: (hfConfig) => set({ hfConfig }),
   isFetchingHf: false,
-  setIsFetchingHf: (isFetchingHf) => set({ isFetchingHf }),
   hfError: null,
-  setHfError: (hfError) => set({ hfError }),
-
   customConfig: {
     parametersInB: 8,
     hiddenSize: 4096,
@@ -71,20 +69,8 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     numKeyValueHeads: 32,
     maxContextLength: 8192,
   },
-  setCustomConfig: (config) => set((state) => ({ customConfig: { ...state.customConfig, ...config } })),
-
-  getActiveModelConfig: () => {
-    const s = get();
-    if (s.inputMode === 'PRESET') return MODEL_PRESETS[s.presetModelId];
-    if (s.inputMode === 'HF_URL') return s.hfConfig;
-    return s.customConfig;
-  },
-
   gpuId: 'a100-80',
-  setGpuId: (gpuId) => set({ gpuId }),
   gpuCount: 1,
-  setGpuCount: (gpuCount) => set({ gpuCount }),
-
   params: {
     quantizationBits: 16,
     kvQuantizationBits: 16,
@@ -96,7 +82,89 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     numSamples: 1000,
     numEpochs: 1,
   },
-  setParams: (params) => set((state) => ({ params: { ...state.params, ...params } })),
+};
+
+export const useSimulatorStore = create<SimulatorState>((set, get) => ({
+  isInfoOpen: false,
+  setIsInfoOpen: (isInfoOpen) => set({ isInfoOpen }),
+
+  isCompareMode: false,
+  setIsCompareMode: (isCompareMode) => set({ isCompareMode }),
+  activeScenario: 'A',
+  setActiveScenario: (activeScenario) => set({ activeScenario }),
+
+  scenarios: {
+    A: { ...initialScenarioData },
+    B: { ...initialScenarioData },
+  },
+
+  setInputMode: (mode) => set((s) => ({ 
+    scenarios: { ...s.scenarios, [s.activeScenario]: { ...s.scenarios[s.activeScenario], inputMode: mode } } 
+  })),
+
+  setPresetModelId: (id) => set((s) => ({ 
+    scenarios: { ...s.scenarios, [s.activeScenario]: { ...s.scenarios[s.activeScenario], presetModelId: id } } 
+  })),
+
+  setHfUrl: (url) => set((s) => ({ 
+    scenarios: { ...s.scenarios, [s.activeScenario]: { ...s.scenarios[s.activeScenario], hfUrl: url } } 
+  })),
+
+  setHfConfig: (config) => set((s) => ({ 
+    scenarios: { ...s.scenarios, [s.activeScenario]: { ...s.scenarios[s.activeScenario], hfConfig: config } } 
+  })),
+
+  setIsFetchingHf: (fetching) => set((s) => ({ 
+    scenarios: { ...s.scenarios, [s.activeScenario]: { ...s.scenarios[s.activeScenario], isFetchingHf: fetching } } 
+  })),
+
+  setHfError: (error) => set((s) => ({ 
+    scenarios: { ...s.scenarios, [s.activeScenario]: { ...s.scenarios[s.activeScenario], hfError: error } } 
+  })),
+
+  setCustomConfig: (config) => set((s) => ({
+    scenarios: { 
+      ...s.scenarios, 
+      [s.activeScenario]: { 
+        ...s.scenarios[s.activeScenario], 
+        customConfig: { ...s.scenarios[s.activeScenario].customConfig, ...config } 
+      } 
+    }
+  })),
+
+  setGpuId: (id) => set((s) => ({ 
+    scenarios: { ...s.scenarios, [s.activeScenario]: { ...s.scenarios[s.activeScenario], gpuId: id } } 
+  })),
+
+  setGpuCount: (count) => set((s) => ({ 
+    scenarios: { ...s.scenarios, [s.activeScenario]: { ...s.scenarios[s.activeScenario], gpuCount: count } } 
+  })),
+
+  setParams: (params) => set((s) => ({
+    scenarios: { 
+      ...s.scenarios, 
+      [s.activeScenario]: { 
+        ...s.scenarios[s.activeScenario], 
+        params: { ...s.scenarios[s.activeScenario].params, ...params } 
+      } 
+    }
+  })),
+
+  copyScenario: (from, to) => set((s) => ({
+    scenarios: {
+      ...s.scenarios,
+      [to]: JSON.parse(JSON.stringify(s.scenarios[from]))
+    }
+  })),
+
+  getActiveModelConfig: (scenarioId) => {
+    const s = get();
+    const targetId = scenarioId || s.activeScenario;
+    const data = s.scenarios[targetId];
+    if (data.inputMode === 'PRESET') return MODEL_PRESETS[data.presetModelId];
+    if (data.inputMode === 'HF_URL') return data.hfConfig;
+    return data.customConfig;
+  },
 
   editingField: null,
   setEditingField: (editingField) => set({ editingField }),
