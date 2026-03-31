@@ -3,11 +3,15 @@
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { MODEL_PRESETS, GPUS, QUANTIZATION_OPTIONS } from '../data/presets';
 import { fetchHFModelConfig } from '../utils/huggingface';
-import { Server, Database, Activity, UploadCloud, CheckCircle, HelpCircle } from 'lucide-react';
+import { Server, Database, Activity, UploadCloud, CheckCircle, HelpCircle, AlertTriangle } from 'lucide-react';
+
 
 export default function InputPanel() {
   const store = useSimulatorStore();
-  
+  const config = store.getActiveModelConfig();
+  const maxContext = config?.maxContextLength || 0;
+  const totalTokens = store.params.inputLength + store.params.outputLength;
+  const isLimitExceeded = maxContext > 0 && totalTokens > maxContext;
   const handleHfFetch = async () => {
     if (!store.hfUrl) return;
     store.setIsFetchingHf(true);
@@ -279,6 +283,28 @@ export default function InputPanel() {
                   )}
                 </div>
               </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-primary-400 font-medium">Max Context</label>
+                <div onDoubleClick={() => store.setEditingField('custom_context')}>
+                  {store.editingField === 'custom_context' ? (
+                    <input 
+                      autoFocus type="text" inputMode="numeric"
+                      className="glass-input !py-1 w-full text-right"
+                      value={store.customConfig.maxContextLength || ''}
+                      onChange={(e) => store.setCustomConfig({ maxContextLength: Number(e.target.value.replace(/\D/g, '')) })}
+                      onBlur={() => store.setEditingField(null)}
+                      onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
+                    />
+                  ) : (
+                    <div className="glass-input !py-1 text-right flex justify-between px-3 cursor-text">
+                      <span className="text-primary-500/50 text-[10px] uppercase">Tokens</span>
+                      <span className="text-primary-400 font-mono">{store.customConfig.maxContextLength?.toLocaleString() || 'N/A'}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="col-span-2 mt-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
                 <p className="text-[10px] text-gray-500 leading-relaxed italic">
                   * Custom 모드에서는 최대 컨텍스트 길이를 자동으로 알 수 없습니다. 해당 모델의 config.json이나 공식 기술 문서를 참고하여 슬라이더 범위를 조절해 주세요.
@@ -389,7 +415,7 @@ export default function InputPanel() {
                     onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
                   />
                 ) : (
-                  <span className="text-primary-400 font-mono font-bold cursor-help border-b border-dotted border-primary-500/50" title="Double-click to type">
+                  <span className={`${isLimitExceeded ? 'text-red-500' : 'text-primary-400'} font-mono font-bold cursor-help border-b border-dotted ${isLimitExceeded ? 'border-red-500/50' : 'border-primary-500/50'}`} title="Double-click to type">
                     {store.params.inputLength.toLocaleString()}
                   </span>
                 )}
@@ -397,12 +423,26 @@ export default function InputPanel() {
             </div>
             <input 
               title="Input Prompt Length" type="range" 
-              min="128" max="131072" step="128"
+              min="128" max={maxContext || 131072} step="128"
               value={store.params.inputLength}
               onChange={(e) => store.setParams({ inputLength: Number(e.target.value) })}
               className="w-full accent-primary-500"
             />
           </div>
+
+          {isLimitExceeded && (
+            <div className="flex items-start gap-2.5 p-3 bg-red-500/10 border border-red-500/20 rounded-xl animate-in fade-in slide-in-from-top-1 duration-300">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-0.5">
+                <p className="text-[11px] font-bold text-red-400">Token Limit Exceeded</p>
+                <p className="text-[10px] text-red-400/80 leading-tight">
+                  Sum of input ({store.params.inputLength.toLocaleString()}) and output ({store.params.outputLength.toLocaleString()}) tokens 
+                  is <span className="font-bold underline">{totalTokens.toLocaleString()}</span>, which exceeds the model's 
+                  Max Context ({maxContext.toLocaleString()}).
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center text-sm">
@@ -423,7 +463,7 @@ export default function InputPanel() {
                     onKeyDown={(e) => e.key === 'Enter' && store.setEditingField(null)}
                   />
                 ) : (
-                  <span className="text-accent-400 font-mono font-bold cursor-help border-b border-dotted border-accent-500/50" title="Double-click to type">
+                  <span className={`${isLimitExceeded ? 'text-red-500' : 'text-accent-400'} font-mono font-bold cursor-help border-b border-dotted ${isLimitExceeded ? 'border-red-500/50' : 'border-accent-500/50'}`} title="Double-click to type">
                     {store.params.outputLength.toLocaleString()}
                   </span>
                 )}
@@ -431,7 +471,7 @@ export default function InputPanel() {
             </div>
             <input 
               title="Max Output Length" type="range" 
-              min="128" max="131072" step="128"
+              min="128" max={maxContext || 131072} step="128"
               value={store.params.outputLength}
               onChange={(e) => store.setParams({ outputLength: Number(e.target.value) })}
               className="w-full accent-accent-500"

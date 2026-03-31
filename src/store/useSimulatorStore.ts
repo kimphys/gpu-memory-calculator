@@ -69,6 +69,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     numLayers: 32,
     numAttentionHeads: 32,
     numKeyValueHeads: 32,
+    maxContextLength: 8192,
   },
   setCustomConfig: (config) => set((state) => ({ customConfig: { ...state.customConfig, ...config } })),
 

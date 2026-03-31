@@ -11,6 +11,12 @@ export interface HFModelConfigRaw {
   num_local_experts?: number;
   num_experts_per_tok?: number;
   max_position_embeddings?: number;
+  n_positions?: number;
+  n_ctx?: number;
+  max_seq_len?: number;
+  seq_length?: number;
+  model_max_length?: number;
+
   // Nested config for multimodal/hybrid models (Qwen 2.5/3.5)
   text_config?: HFModelConfigRaw;
   layer_types?: string[];
@@ -28,7 +34,14 @@ export function parseRawConfig(data: HFModelConfigRaw, modelId?: string): ModelC
     const vocabSize = config.vocab_size || 32000;
     const numExperts = config.num_local_experts || 0;
     const numActiveExperts = config.num_experts_per_tok || 0;
-    const maxContextLength = config.max_position_embeddings || 2048;
+    const maxContextLength = config.max_position_embeddings || 
+                             config.n_positions || 
+                             config.n_ctx || 
+                             config.max_seq_len || 
+                             config.seq_length || 
+                             config.model_max_length || 
+                             2048;
+
 
     // Detect Hybrid Layers (e.g. Qwen 3.5)
     const layerTypes = config.layer_types || [];
