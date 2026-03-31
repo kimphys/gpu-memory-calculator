@@ -2,14 +2,44 @@ import { ModelConfig } from '../utils/calculator';
 
 export const GPUS = [
   // AWS Seoul (ap-northeast-2) On-Demand benchmarks (approx)
-  { id: 'h200-141', name: 'NVIDIA H200 (141GB)', vramGb: 141, bandwidthGbps: 4800, tflops: 989, awsInstance: 'p5e.48xlarge (8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/p5/' },
-  { id: 'h100-80', name: 'NVIDIA H100 (80GB)', vramGb: 80, bandwidthGbps: 3350, tflops: 989, awsInstance: 'p5.48xlarge (8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/p5/' },
-  { id: 'a100-80', name: 'NVIDIA A100 (80GB)', vramGb: 80, bandwidthGbps: 2039, tflops: 312, awsInstance: 'p4de.24xlarge (8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/p4/' },
-  { id: 'a100-40', name: 'NVIDIA A100 (40GB)', vramGb: 40, bandwidthGbps: 1555, tflops: 312, awsInstance: 'p4d.24xlarge (8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/p4/' },
-  { id: 'l40s-48', name: 'NVIDIA L40S (48GB)', vramGb: 48, bandwidthGbps: 864, tflops: 362, awsInstance: 'G6e family (1,4,8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/g6e/' },
-  { id: 'a10g-24', name: 'NVIDIA A10G (24GB)', vramGb: 24, bandwidthGbps: 600, tflops: 31, awsInstance: 'G5 family (1,4,8,16x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/g5/' },
-  { id: 'rtx4090-24', name: 'RTX 4090 (24GB)', vramGb: 24, bandwidthGbps: 1008, tflops: 330 },
-  { id: 'mac-studio', name: 'Apple M2 Ultra (96GB)', vramGb: 96, bandwidthGbps: 800, tflops: 30 }
+  { 
+    id: 'h200-141', name: 'NVIDIA H200 (141GB)', 
+    vramGb: 141, bandwidthGbps: 4800, tflops: 989, interconnectBandwidthGbps: 900, 
+    awsInstance: 'p5e.48xlarge (8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/p5/' 
+  },
+  { 
+    id: 'h100-80', name: 'NVIDIA H100 (80GB)', 
+    vramGb: 80, bandwidthGbps: 3350, tflops: 989, interconnectBandwidthGbps: 900, 
+    awsInstance: 'p5.48xlarge (8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/p5/' 
+  },
+  { 
+    id: 'a100-80', name: 'NVIDIA A100 (80GB)', 
+    vramGb: 80, bandwidthGbps: 2039, tflops: 312, interconnectBandwidthGbps: 600, 
+    awsInstance: 'p4de.24xlarge (8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/p4/' 
+  },
+  { 
+    id: 'a100-40', name: 'NVIDIA A100 (40GB)', 
+    vramGb: 40, bandwidthGbps: 1555, tflops: 312, interconnectBandwidthGbps: 600, 
+    awsInstance: 'p4d.24xlarge (8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/p4/' 
+  },
+  { 
+    id: 'l40s-48', name: 'NVIDIA L40S (48GB)', 
+    vramGb: 48, bandwidthGbps: 864, tflops: 362, interconnectBandwidthGbps: 64,   
+    awsInstance: 'G6e family (1,4,8x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/g6e/' 
+  },
+  { 
+    id: 'a10g-24', name: 'NVIDIA A10G (24GB)', 
+    vramGb: 24, bandwidthGbps: 600, tflops: 31,  interconnectBandwidthGbps: 64,   
+    awsInstance: 'G5 family (1,4,8,16x)', awsUrl: 'https://aws.amazon.com/ko/ec2/instance-types/g5/' 
+  },
+  { 
+    id: 'rtx4090-24', name: 'RTX 4090 (24GB)', 
+    vramGb: 24, bandwidthGbps: 1008, tflops: 330, interconnectBandwidthGbps: 32,  
+  },
+  { 
+    id: 'mac-studio', name: 'Apple M2 Ultra (96GB)', 
+    vramGb: 96, bandwidthGbps: 800, tflops: 30,  interconnectBandwidthGbps: 800   
+  }
 ];
 
 export const QUANTIZATION_OPTIONS = [

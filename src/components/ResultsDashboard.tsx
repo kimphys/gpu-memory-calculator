@@ -47,10 +47,15 @@ export default function ResultsDashboard() {
   let trainingMetrics: any = null;
   let maxConcurrency = 0;
 
-  if (!store.params.isTraining) {
+if (!store.params.isTraining) {
       if (totalUsedGb <= totalVramLimit) {
         metrics = estimatePerformance(
-          { bandwidthGbps: selectedGpu.bandwidthGbps, tflops: (selectedGpu as any).tflops || 100 }, 
+          { 
+            bandwidthGbps: selectedGpu.bandwidthGbps, 
+            tflops: (selectedGpu as any).tflops || 100,
+            vramGb: (selectedGpu as any).vramGb || 24, // 👈 [추가됨] 드디어 VRAM 용량 전달!
+            interconnectBandwidthGbps: (selectedGpu as any).interconnectBandwidthGbps || 64 // 👈 [추가됨] 멀티 GPU 통신 속도 전달!
+          }, 
           activeModel, store.params, store.gpuCount
         );
       }
@@ -59,7 +64,12 @@ export default function ResultsDashboard() {
       maxConcurrency = kvPerUser > 0 ? Math.floor(availableForKV / kvPerUser) : 0;
   } else {
       trainingMetrics = calculateTrainingMetrics(
-        { bandwidthGbps: selectedGpu.bandwidthGbps, tflops: (selectedGpu as any).tflops || 100 },
+        { 
+          bandwidthGbps: selectedGpu.bandwidthGbps, 
+          tflops: (selectedGpu as any).tflops || 100,
+          vramGb: (selectedGpu as any).vramGb || 24, // 👈 [추가됨]
+          interconnectBandwidthGbps: (selectedGpu as any).interconnectBandwidthGbps || 64 // 👈 [추가됨]
+        },
         activeModel, store.params, store.gpuCount
       );
   }

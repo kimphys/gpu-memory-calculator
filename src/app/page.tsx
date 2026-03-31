@@ -3,7 +3,7 @@
 import InputPanel from '../components/InputPanel';
 import ResultsDashboard from '../components/ResultsDashboard';
 import InfoModal from '../components/InfoModal';
-import { Info, Activity } from 'lucide-react';
+import { Info, Activity, AlertTriangle } from 'lucide-react';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 
 export default function Home() {
@@ -35,6 +35,14 @@ export default function Home() {
                 정밀한 계산 로직이 궁금하시다면 우측의 <strong className="text-white">"계산 기준 보기"</strong>를 클릭해 주세요.
               </p>
             </div>
+          </div>
+          <div className="mt-3 flex items-start gap-3 px-5 py-3 bg-amber-500/5 border border-amber-500/10 rounded-xl">
+            {/* 아이콘 크기도 글자 크기에 맞춰 w-4에서 w-5로 살짝 키우는 게 균형이 맞습니다 */}
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-200/70 leading-relaxed">
+              <strong>주의:</strong> 설정값이 VRAM 한계에 근접할수록 비선형적 병목으로 인해 예측 오차가 커질 수 있습니다. 
+              정확한 리소스 설계를 위해 <span className="text-amber-400 font-medium underline underline-offset-4">반드시 실제 환경에서의 벤치마크 측정을 병행</span>하시기 바랍니다.
+            </p>
           </div>
         </header>
 
